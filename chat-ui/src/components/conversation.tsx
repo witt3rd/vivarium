@@ -1,0 +1,601 @@
+"use client";
+
+import { Conversation as ConversationType } from "@/api/models/Conversation";
+import { Message } from "@/api/models/Message";
+import { SystemPrompt } from "@/api/models/SystemPrompt";
+import { ConversationsService } from "@/api/services/ConversationsService";
+import { SystemPromptsService } from "@/api/services/SystemPromptsService";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Textarea } from "@/components/ui/textarea";
+import { Edit2 } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { ConversationHistory } from "./conversation-history";
+import { MessageComponent } from "./message";
+
+export function Conversation() {
+  const [conversations, setConversations] = useState<ConversationType[]>([]);
+  const [currentId, setCurrentId] = useState<string | null>(null);
+  const [messages, setMessages] = useState<Message[]>([]);
+  const [systemPrompts, setSystemPrompts] = useState<SystemPrompt[]>([]);
+
+  // UI state
+  const [isEditingTitle, setIsEditingTitle] = useState(false);
+  const [editedTitle, setEditedTitle] = useState("");
+  const [message, setMessage] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const currentConversation = conversations.find((c) => c.id === currentId);
+  const messagesEndRef = useRef<HTMLDivElement>(null);
+  const titleInputRef = useRef<HTMLInputElement>(null);
+
+  // Scroll to bottom when messages change
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [messages]);
+
+  // Load conversations and create initial one if needed
+  useEffect(() => {
+    const init = async () => {
+      try {
+        const convs =
+          await ConversationsService.getConversationsConversationsGet();
+        setConversations(convs);
+
+        if (convs.length === 0) {
+          const newConv =
+            await ConversationsService.createConversationConversationsPost(
+              "New Conversation"
+            );
+          if (newConv.id) {
+            setConversations([newConv]);
+            setCurrentId(newConv.id);
+          }
+        } else if (convs[0]?.id) {
+          setCurrentId(convs[0].id);
+        }
+      } catch (err) {
+        console.error("Error initializing:", err);
+        setError("Failed to initialize");
+      }
+    };
+    init();
+  }, []);
+
+  // Load system prompts
+  useEffect(() => {
+    SystemPromptsService.getSystemPromptsSystemPromptsGet()
+      .then(setSystemPrompts)
+      .catch((err) => {
+        console.error("Error loading system prompts:", err);
+      });
+  }, []);
+
+  // Load messages when conversation changes
+  useEffect(() => {
+    if (!currentId) return;
+
+    ConversationsService.getConversationConversationsConversationIdGet(
+      currentId
+    )
+      .then(async (conv) => {
+        if (conv.system_prompt_id) {
+          const prompt =
+            await SystemPromptsService.getSystemPromptSystemPromptsPromptIdGet(
+              conv.system_prompt_id
+            );
+          setMessages([
+            {
+              id: conv.system_prompt_id,
+              role: "system",
+              content: [
+                { type: "text", text: prompt.name },
+                { type: "text", text: prompt.content },
+              ],
+              timestamp: new Date().toISOString(),
+              cache: prompt.is_cached,
+            },
+            ...(conv.messages?.filter((m) => m.role !== "system") || []),
+          ]);
+        } else {
+          setMessages(conv.messages || []);
+        }
+      })
+      .catch((err) => {
+        console.error("Error loading messages:", err);
+        setError("Failed to load messages");
+      });
+  }, [currentId]);
+
+  // Helper to determine if a conversation is empty
+  const isEmptyConversation = (conv: ConversationType): boolean => {
+    return !conv.messages || conv.messages.length === 0; // Simple check - just no messages
+  };
+
+  const handleNewConversation = async () => {
+    // Only prevent new conversation if current one is completely unused
+    if (
+      currentId &&
+      currentConversation &&
+      (!messages || messages.length === 0) &&
+      currentConversation.name === "New Conversation"
+    ) {
+      return;
+    }
+
+    try {
+      const conv =
+        await ConversationsService.createConversationConversationsPost(
+          "New Conversation"
+        );
+      if (conv.id) {
+        setConversations((prev) => [conv, ...prev]);
+        setCurrentId(conv.id);
+        setMessages([]);
+      }
+    } catch (err) {
+      console.error("Error creating conversation:", err);
+      setError("Failed to create conversation");
+    }
+  };
+
+  const handleTitleEdit = async () => {
+    if (!currentId || !editedTitle.trim()) return;
+
+    try {
+      const updated =
+        await ConversationsService.updateConversationConversationsConversationIdPut(
+          currentId,
+          {
+            name: editedTitle.trim(),
+            system_prompt_id: currentConversation?.system_prompt_id,
+            model: currentConversation?.model,
+            max_tokens: currentConversation?.max_tokens,
+          }
+        );
+      setConversations((prev) =>
+        prev.map((c) => (c.id === currentId ? updated : c))
+      );
+      setIsEditingTitle(false);
+    } catch (err) {
+      console.error("Error updating title:", err);
+      setError("Failed to update title");
+    }
+  };
+
+  const handleSystemPromptChange = async (promptId: string | null) => {
+    if (!currentId) return;
+
+    try {
+      const updated =
+        await ConversationsService.updateConversationConversationsConversationIdPut(
+          currentId,
+          {
+            name: currentConversation?.name || "New Conversation",
+            system_prompt_id: promptId,
+            model: currentConversation?.model,
+            max_tokens: currentConversation?.max_tokens,
+          }
+        );
+      setConversations((prev) =>
+        prev.map((c) => (c.id === currentId ? updated : c))
+      );
+
+      if (promptId) {
+        const prompt =
+          await SystemPromptsService.getSystemPromptSystemPromptsPromptIdGet(
+            promptId
+          );
+        setMessages([
+          {
+            id: promptId,
+            role: "system",
+            content: [
+              { type: "text", text: prompt.name },
+              { type: "text", text: prompt.content },
+            ],
+            timestamp: new Date().toISOString(),
+            cache: prompt.is_cached,
+          },
+          ...messages.filter((m) => m.role !== "system"),
+        ]);
+      } else {
+        setMessages(messages.filter((m) => m.role !== "system"));
+      }
+    } catch (err) {
+      console.error("Error updating system prompt:", err);
+      setError("Failed to update system prompt");
+    }
+  };
+
+  const handleSend = async () => {
+    if (!currentId || !message.trim()) return;
+
+    try {
+      setLoading(true);
+      setError(null);
+
+      // Clean up any empty conversations except current one
+      const emptyConvs = conversations.filter(
+        (c) => c.id !== currentId && isEmptyConversation(c)
+      );
+
+      // Delete empty conversations
+      await Promise.all(
+        emptyConvs.map(async (conv) => {
+          if (conv.id) {
+            try {
+              await ConversationsService.removeConversationConversationsConversationIdDelete(
+                conv.id
+              );
+              setConversations((prev) => prev.filter((c) => c.id !== conv.id));
+            } catch (err) {
+              console.error("Error cleaning up empty conversation:", err);
+            }
+          }
+        })
+      );
+
+      // Add user message to UI immediately
+      const userMessage: Message = {
+        id: crypto.randomUUID(),
+        role: "user",
+        content: [{ type: "text", text: message }],
+        timestamp: new Date().toISOString(),
+      };
+      setMessages((prev) => [...prev, userMessage]);
+      setMessage("");
+
+      // Update conversations list
+      setConversations((prev) =>
+        prev.map((c) =>
+          c.id === currentId
+            ? { ...c, messages: [...(c.messages || []), userMessage] }
+            : c
+        )
+      );
+
+      // Create placeholder for assistant response
+      const assistantMessage: Message = {
+        id: crypto.randomUUID(),
+        role: "assistant",
+        content: [{ type: "text", text: "", format: "markdown" }],
+        timestamp: new Date().toISOString(),
+      };
+      setMessages((prev) => [...prev, assistantMessage]);
+
+      // Update conversations list with assistant message
+      setConversations((prev) =>
+        prev.map((c) =>
+          c.id === currentId
+            ? { ...c, messages: [...(c.messages || []), assistantMessage] }
+            : c
+        )
+      );
+
+      // Stream response
+      const response = await fetch(`/api/conversations/${currentId}/messages`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(userMessage),
+      });
+
+      if (!response.ok)
+        throw new Error(`HTTP error! status: ${response.status}`);
+
+      const reader = response.body?.getReader();
+      if (!reader) throw new Error("No reader available");
+
+      const decoder = new TextDecoder();
+      let responseText = "";
+
+      try {
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+
+          const chunk = decoder.decode(value);
+          const lines = chunk.split("\n");
+
+          for (const line of lines) {
+            if (!line.startsWith("data: ")) continue;
+
+            const data = line.slice(6);
+            if (data === "[DONE]") break;
+
+            try {
+              if (!data.trim().startsWith("{")) continue;
+
+              const event = JSON.parse(data);
+
+              switch (event.type) {
+                case "message_start":
+                  if (event.message.role === "user") {
+                    setMessages((prev) => {
+                      const newMessages = [...prev];
+                      const userMessageIndex = newMessages.findIndex(
+                        (msg) =>
+                          msg.role === "user" && msg.id === userMessage.id
+                      );
+                      if (userMessageIndex !== -1) {
+                        newMessages[userMessageIndex] = {
+                          ...newMessages[userMessageIndex],
+                          id: event.message.id,
+                        };
+                      }
+                      return newMessages;
+                    });
+                  } else {
+                    setMessages((prev) => {
+                      const newMessages = [...prev];
+                      const lastMessage = newMessages[newMessages.length - 1];
+                      if (lastMessage?.role === "assistant") {
+                        lastMessage.id = event.message.id;
+                        setConversations((prev) =>
+                          prev.map((c) =>
+                            c.id === currentId
+                              ? {
+                                  ...c,
+                                  messages: (c.messages || []).map((m) =>
+                                    m.id === assistantMessage.id
+                                      ? { ...m, id: event.message.id }
+                                      : m
+                                  ),
+                                }
+                              : c
+                          )
+                        );
+                      }
+                      return newMessages;
+                    });
+                  }
+                  break;
+
+                case "content_block_delta":
+                  if (
+                    event.delta?.type === "text_delta" &&
+                    typeof event.delta.text === "string"
+                  ) {
+                    responseText += event.delta.text;
+
+                    setMessages((prev) => {
+                      const newMessages = [...prev];
+                      const lastMessage = newMessages[newMessages.length - 1];
+                      if (lastMessage?.role === "assistant") {
+                        lastMessage.content = [
+                          {
+                            type: "text",
+                            text: responseText,
+                            format: "markdown",
+                          },
+                        ];
+                        // Update conversation list with new content
+                        setConversations((prev) =>
+                          prev.map((c) =>
+                            c.id === currentId
+                              ? {
+                                  ...c,
+                                  messages: (c.messages || []).map((m) =>
+                                    m.id === lastMessage.id
+                                      ? { ...m, content: lastMessage.content }
+                                      : m
+                                  ),
+                                }
+                              : c
+                          )
+                        );
+                      }
+                      return newMessages;
+                    });
+                  }
+                  break;
+              }
+            } catch (err) {
+              console.error("Error processing event:", err);
+              continue;
+            }
+          }
+        }
+      } finally {
+        reader.releaseLock();
+      }
+    } catch (err) {
+      console.error("Error sending message:", err);
+      setError("Failed to send message");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleDeleteMessage = async (messageId: string) => {
+    if (!currentId) return;
+
+    try {
+      await ConversationsService.deleteMessageConversationsConversationIdMessagesMessageIdDelete(
+        currentId,
+        messageId
+      );
+      setMessages((prev) => prev.filter((msg) => msg.id !== messageId));
+      setConversations((prev) =>
+        prev.map((c) =>
+          c.id === currentId
+            ? { ...c, messages: c.messages?.filter((m) => m.id !== messageId) }
+            : c
+        )
+      );
+    } catch (err) {
+      console.error("Error deleting message:", err);
+      setError("Failed to delete message");
+    }
+  };
+
+  const handleToggleCache = async (messageId: string) => {
+    if (!currentId) return;
+
+    try {
+      await ConversationsService.toggleMessageCacheConversationsConversationIdMessagesMessageIdCachePost(
+        currentId,
+        messageId
+      );
+      setMessages((prev) =>
+        prev.map((msg) =>
+          msg.id === messageId ? { ...msg, cache: !msg.cache } : msg
+        )
+      );
+    } catch (err) {
+      console.error("Error toggling cache:", err);
+      setError("Failed to toggle cache");
+    }
+  };
+
+  return (
+    <div className="h-screen p-4 overflow-hidden">
+      <div className="flex gap-4 h-full">
+        <ConversationHistory
+          conversations={conversations}
+          selectedId={currentId}
+          onSelect={setCurrentId}
+          onDelete={async (id: string) => {
+            try {
+              await ConversationsService.removeConversationConversationsConversationIdDelete(
+                id
+              );
+              setConversations((prev) => prev.filter((c) => c.id !== id));
+              if (currentId === id) {
+                const nextId = conversations.find((c) => c.id !== id)?.id;
+                setCurrentId(nextId || null);
+                setMessages([]);
+              }
+            } catch (err) {
+              console.error("Error deleting conversation:", err);
+              setError("Failed to delete conversation");
+            }
+          }}
+          onNew={handleNewConversation}
+        />
+
+        <Card className="h-full flex flex-col flex-1 max-w-[800px]">
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <div className="flex items-center gap-2">
+              {isEditingTitle ? (
+                <Input
+                  ref={titleInputRef}
+                  value={editedTitle}
+                  onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
+                    setEditedTitle(e.target.value)
+                  }
+                  onBlur={handleTitleEdit}
+                  onKeyDown={(e: React.KeyboardEvent<HTMLInputElement>) => {
+                    if (e.key === "Enter") handleTitleEdit();
+                    else if (e.key === "Escape") setIsEditingTitle(false);
+                  }}
+                  className="h-7 w-[300px]"
+                  placeholder="Conversation Title"
+                />
+              ) : (
+                <div
+                  className="flex items-center gap-2 group cursor-pointer"
+                  onClick={() => {
+                    if (currentId) {
+                      setEditedTitle(currentConversation?.name || "");
+                      setIsEditingTitle(true);
+                      setTimeout(() => titleInputRef.current?.focus(), 0);
+                    }
+                  }}
+                >
+                  <CardTitle>
+                    {currentId
+                      ? currentConversation?.name || "Untitled"
+                      : "No Conversation Selected"}
+                  </CardTitle>
+                  {currentId && (
+                    <Edit2
+                      className="h-3.5 w-3.5 opacity-0 group-hover:opacity-100 transition-opacity"
+                      strokeWidth={1.5}
+                    />
+                  )}
+                </div>
+              )}
+            </div>
+          </CardHeader>
+
+          <CardContent className="flex-1 flex flex-col space-y-4 min-h-0">
+            <Select
+              value={currentConversation?.system_prompt_id || "none"}
+              onValueChange={(value: string) =>
+                handleSystemPromptChange(value === "none" ? null : value)
+              }
+            >
+              <SelectTrigger className="w-[300px]">
+                <SelectValue placeholder="Select System Prompt" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="none">No System Prompt</SelectItem>
+                {systemPrompts.map((prompt) => (
+                  <SelectItem key={prompt.id} value={prompt.id}>
+                    {prompt.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+
+            <ScrollArea className="flex-1 border rounded-md p-4 min-h-0">
+              <div className="space-y-4">
+                {messages.map((msg, index) => (
+                  <MessageComponent
+                    key={msg.id || index}
+                    message={msg}
+                    onDelete={handleDeleteMessage}
+                    isCached={msg.cache || false}
+                    onCacheChange={handleToggleCache}
+                  />
+                ))}
+                <div ref={messagesEndRef} />
+              </div>
+            </ScrollArea>
+
+            {error && (
+              <div className="bg-destructive/15 text-destructive px-4 py-2 rounded-md text-sm">
+                {error}
+              </div>
+            )}
+
+            <Textarea
+              className="resize-none"
+              placeholder="Type your message here..."
+              rows={3}
+              value={message}
+              onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) =>
+                setMessage(e.target.value)
+              }
+              onKeyDown={(e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+                if (e.key === "Enter" && !e.shiftKey) {
+                  e.preventDefault();
+                  handleSend();
+                }
+              }}
+            />
+
+            <Button
+              onClick={handleSend}
+              disabled={loading || !message.trim()}
+              className="self-end"
+            >
+              {loading ? "Sending..." : "Send"}
+            </Button>
+          </CardContent>
+        </Card>
+      </div>
+    </div>
+  );
+}
