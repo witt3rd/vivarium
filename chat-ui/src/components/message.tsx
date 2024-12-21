@@ -181,15 +181,19 @@ export function MessageComponent({
             <h3 className="font-medium">
               {(message.content[0] as MessageContent).text}
             </h3>
-            <MessageContentComponent
-              content={[message.content[1] as MessageContent]}
-            />
+            <div className="overflow-hidden">
+              <MessageContentComponent
+                content={[message.content[1] as MessageContent]}
+              />
+            </div>
           </div>
         ) : (
           <>
-            <MessageContentComponent
-              content={message.content as MessageContent[]}
-            />
+            <div className="overflow-hidden">
+              <MessageContentComponent
+                content={message.content as MessageContent[]}
+              />
+            </div>
             {message.role === "assistant" && message.usage && (
               <div className="text-[8px] text-muted-foreground/70 mt-2 flex gap-4">
                 <span>Input: {message.usage.input_tokens}</span>

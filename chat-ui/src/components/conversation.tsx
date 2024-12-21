@@ -673,7 +673,7 @@ export function Conversation() {
           onNew={handleNewConversation}
         />
 
-        <Card className="h-full flex flex-col flex-1 max-w-[800px]">
+        <Card className="h-full flex flex-col flex-1 max-w-[1200px]">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <div className="flex items-center gap-2">
               {isEditingTitle ? (
@@ -754,6 +754,19 @@ export function Conversation() {
               >
                 New
               </Button>
+              <div className="flex-1" />
+              <Button
+                variant="outline"
+                size="icon"
+                className="h-8 w-8"
+                onClick={() =>
+                  messagesEndRef.current?.parentElement?.scrollIntoView({
+                    behavior: "smooth",
+                  })
+                }
+              >
+                ↑
+              </Button>
             </div>
 
             <ScrollArea className="flex-1 border rounded-md p-4 min-h-0">
@@ -771,6 +784,19 @@ export function Conversation() {
                 <div ref={messagesEndRef} />
               </div>
             </ScrollArea>
+
+            <div className="flex justify-end">
+              <Button
+                variant="outline"
+                size="icon"
+                className="h-8 w-8"
+                onClick={() =>
+                  messagesEndRef.current?.scrollIntoView({ behavior: "smooth" })
+                }
+              >
+                ↓
+              </Button>
+            </div>
 
             {error && (
               <div className="bg-destructive/15 text-destructive px-4 py-2 rounded-md text-sm">
