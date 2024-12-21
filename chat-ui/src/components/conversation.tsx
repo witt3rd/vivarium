@@ -24,8 +24,13 @@ import { useEffect, useRef, useState } from "react";
 import { ConversationHistory } from "./conversation-history";
 import { MessageComponent } from "./message";
 
-export function Conversation() {
-  const [conversations, setConversations] = useState<ConversationType[]>([]);
+export function Conversation({
+  conversations,
+  onConversationsChange,
+}: {
+  conversations: ConversationType[];
+  onConversationsChange: (conversations: ConversationType[]) => void;
+}) {
   const [currentId, setCurrentId] = useState<string | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
   const [systemPrompts, setSystemPrompts] = useState<SystemPrompt[]>([]);
@@ -38,6 +43,10 @@ export function Conversation() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isHistoryCollapsed, setIsHistoryCollapsed] = useState(false);
+
+  const currentConversation = conversations.find((c) => c.id === currentId);
+  const messagesEndRef = useRef<HTMLDivElement>(null);
+  const titleInputRef = useRef<HTMLInputElement>(null);
 
   // Load collapsed state from localStorage
   useEffect(() => {
@@ -52,53 +61,10 @@ export function Conversation() {
     localStorage.setItem("historyCollapsed", isHistoryCollapsed.toString());
   }, [isHistoryCollapsed]);
 
-  const currentConversation = conversations.find((c) => c.id === currentId);
-  const messagesEndRef = useRef<HTMLDivElement>(null);
-  const titleInputRef = useRef<HTMLInputElement>(null);
-
-  const createNewConversation = async (addToStart: boolean = true) => {
-    const createParams: ConversationCreate = {
-      name: "New Conversation",
-      id: crypto.randomUUID(),
-    };
-    const conv = await ConversationsService.createConversationConversationsPost(
-      createParams
-    );
-    if (conv.id) {
-      setConversations((prev) =>
-        addToStart ? [conv, ...prev] : [...prev, conv]
-      );
-      setCurrentId(conv.id);
-      setMessages([]);
-    }
-    return conv;
-  };
-
   // Scroll to bottom when messages change
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
-
-  // Load conversations and create initial one if needed
-  useEffect(() => {
-    const init = async () => {
-      try {
-        const convs =
-          await ConversationsService.getConversationsConversationsGet();
-        setConversations(convs);
-
-        if (convs.length === 0) {
-          await createNewConversation(false);
-        } else if (convs[0]?.id) {
-          setCurrentId(convs[0].id);
-        }
-      } catch (error: unknown) {
-        console.error("Error initializing:", error);
-        setError("Failed to initialize");
-      }
-    };
-    init();
-  }, []);
 
   // Load system prompts
   useEffect(() => {
@@ -163,7 +129,19 @@ export function Conversation() {
     }
 
     try {
-      await createNewConversation(true);
+      const createParams: ConversationCreate = {
+        name: "New Conversation",
+        id: crypto.randomUUID(),
+      };
+      const conv =
+        await ConversationsService.createConversationConversationsPost(
+          createParams
+        );
+      if (conv.id) {
+        onConversationsChange([conv, ...conversations]);
+        setCurrentId(conv.id);
+        setMessages([]);
+      }
     } catch (err) {
       console.error("Error creating conversation:", err);
       setError("Failed to create conversation");
@@ -184,7 +162,7 @@ export function Conversation() {
             max_tokens: currentConversation?.max_tokens ?? 8192,
           }
         );
-      setConversations((prev) =>
+      onConversationsChange((prev) =>
         prev.map((c) => (c.id === currentId ? updated : c))
       );
       setIsEditingTitle(false);
@@ -208,7 +186,7 @@ export function Conversation() {
             max_tokens: currentConversation?.max_tokens ?? 8192,
           }
         );
-      setConversations((prev) =>
+      onConversationsChange((prev) =>
         prev.map((c) => (c.id === currentId ? updated : c))
       );
 
@@ -259,7 +237,9 @@ export function Conversation() {
               await ConversationsService.removeConversationConversationsConversationIdDelete(
                 conv.id
               );
-              setConversations((prev) => prev.filter((c) => c.id !== conv.id));
+              onConversationsChange((prev) =>
+                prev.filter((c) => c.id !== conv.id)
+              );
             } catch (err) {
               console.error("Error cleaning up empty conversation:", err);
             }
@@ -280,7 +260,7 @@ export function Conversation() {
       setIsPreCached(false); // Reset cache flag after sending
 
       // Update conversations list
-      setConversations((prev) =>
+      onConversationsChange((prev) =>
         prev.map((c) =>
           c.id === currentId
             ? { ...c, messages: [...(c.messages || []), userMessage] }
@@ -299,7 +279,7 @@ export function Conversation() {
       setMessages((prev) => [...prev, assistantMessage]);
 
       // Update conversations list with assistant message
-      setConversations((prev) =>
+      onConversationsChange((prev) =>
         prev.map((c) =>
           c.id === currentId
             ? { ...c, messages: [...(c.messages || []), assistantMessage] }
@@ -369,7 +349,7 @@ export function Conversation() {
                       if (lastMessage?.role === "assistant") {
                         lastMessage.id = event.message.id;
                         lastMessage.usage = event.message.usage;
-                        setConversations((prev) =>
+                        onConversationsChange((prev) =>
                           prev.map((c) =>
                             c.id === currentId
                               ? {
@@ -412,7 +392,7 @@ export function Conversation() {
                           },
                         ];
                         // Update conversation list with new content
-                        setConversations((prev) =>
+                        onConversationsChange((prev) =>
                           prev.map((c) =>
                             c.id === currentId
                               ? {
@@ -501,7 +481,7 @@ export function Conversation() {
         );
 
         setSystemPrompts((prev) => prev.filter((p) => p.id !== messageId));
-        setConversations((prev) =>
+        onConversationsChange((prev) =>
           prev.map((c) => (c.id === currentId ? updated : c))
         );
         setMessages((prev) => prev.filter((m) => m.id !== messageId));
@@ -519,7 +499,7 @@ export function Conversation() {
         messageId
       );
       setMessages((prev) => prev.filter((msg) => msg.id !== messageId));
-      setConversations((prev) =>
+      onConversationsChange((prev) =>
         prev.map((c) =>
           c.id === currentId
             ? { ...c, messages: c.messages?.filter((m) => m.id !== messageId) }
@@ -675,7 +655,9 @@ export function Conversation() {
                 await ConversationsService.removeConversationConversationsConversationIdDelete(
                   id
                 );
-                setConversations((prev) => prev.filter((c) => c.id !== id));
+                onConversationsChange((prev) =>
+                  prev.filter((c) => c.id !== id)
+                );
                 if (currentId === id) {
                   const nextId = conversations.find((c) => c.id !== id)?.id;
                   setCurrentId(nextId || null);
