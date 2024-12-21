@@ -130,9 +130,9 @@ export function ConversationHistory({
                             variant="ghost"
                             size="sm"
                             onClick={(e) => handleDelete(e, conv)}
-                            className="h-6 w-6 p-0 flex-none ml-2"
+                            className="h-2 w-2 p-0 mr-1"
                           >
-                            <Trash2 className="h-4 w-4" />
+                            <Trash2 className="h-2 w-2" />
                           </Button>
                         </div>
                       ))}
