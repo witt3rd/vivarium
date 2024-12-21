@@ -37,6 +37,20 @@ export function Conversation() {
   const [isPreCached, setIsPreCached] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [isHistoryCollapsed, setIsHistoryCollapsed] = useState(false);
+
+  // Load collapsed state from localStorage
+  useEffect(() => {
+    const savedState = localStorage.getItem("historyCollapsed");
+    if (savedState) {
+      setIsHistoryCollapsed(savedState === "true");
+    }
+  }, []);
+
+  // Save collapsed state to localStorage
+  useEffect(() => {
+    localStorage.setItem("historyCollapsed", isHistoryCollapsed.toString());
+  }, [isHistoryCollapsed]);
 
   const currentConversation = conversations.find((c) => c.id === currentId);
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -649,206 +663,212 @@ export function Conversation() {
 
   return (
     <div className="h-screen p-4 overflow-hidden">
-      <div className="flex gap-4 h-full">
-        <ConversationHistory
-          conversations={conversations}
-          selectedId={currentId}
-          onSelect={setCurrentId}
-          onDelete={async (id: string) => {
-            try {
-              await ConversationsService.removeConversationConversationsConversationIdDelete(
-                id
-              );
-              setConversations((prev) => prev.filter((c) => c.id !== id));
-              if (currentId === id) {
-                const nextId = conversations.find((c) => c.id !== id)?.id;
-                setCurrentId(nextId || null);
-                setMessages([]);
+      <Card className="h-full flex flex-col flex-1 max-w-[1200px] mx-auto relative">
+        <div className="flex h-full">
+          <ConversationHistory
+            className="border-r shadow-lg"
+            conversations={conversations}
+            selectedId={currentId}
+            onSelect={setCurrentId}
+            onDelete={async (id: string) => {
+              try {
+                await ConversationsService.removeConversationConversationsConversationIdDelete(
+                  id
+                );
+                setConversations((prev) => prev.filter((c) => c.id !== id));
+                if (currentId === id) {
+                  const nextId = conversations.find((c) => c.id !== id)?.id;
+                  setCurrentId(nextId || null);
+                  setMessages([]);
+                }
+              } catch (err) {
+                console.error("Error deleting conversation:", err);
+                setError("Failed to delete conversation");
               }
-            } catch (err) {
-              console.error("Error deleting conversation:", err);
-              setError("Failed to delete conversation");
-            }
-          }}
-          onNew={handleNewConversation}
-        />
-
-        <Card className="h-full flex flex-col flex-1 max-w-[1200px]">
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <div className="flex items-center gap-2">
-              {isEditingTitle ? (
-                <Input
-                  ref={titleInputRef}
-                  value={editedTitle}
-                  onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
-                    setEditedTitle(e.target.value)
-                  }
-                  onBlur={handleTitleEdit}
-                  onKeyDown={(e: React.KeyboardEvent<HTMLInputElement>) => {
-                    if (e.key === "Enter") handleTitleEdit();
-                    else if (e.key === "Escape") setIsEditingTitle(false);
-                  }}
-                  className="h-7 w-[300px]"
-                  placeholder="Conversation Title"
-                />
-              ) : (
-                <div
-                  className="flex items-center gap-2 group cursor-pointer"
-                  onClick={() => {
-                    if (currentId) {
-                      setEditedTitle(currentConversation?.name || "");
-                      setIsEditingTitle(true);
-                      setTimeout(() => titleInputRef.current?.focus(), 0);
+            }}
+            onNew={handleNewConversation}
+            isCollapsed={isHistoryCollapsed}
+            onCollapsedChange={setIsHistoryCollapsed}
+          />
+          <div className="flex-1 flex flex-col min-w-0">
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <div className="flex items-center gap-2">
+                {isEditingTitle ? (
+                  <Input
+                    ref={titleInputRef}
+                    value={editedTitle}
+                    onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
+                      setEditedTitle(e.target.value)
                     }
-                  }}
-                >
-                  <CardTitle>
-                    {currentId
-                      ? currentConversation?.name || "Untitled"
-                      : "No Conversation Selected"}
-                  </CardTitle>
-                  {currentId && (
-                    <Edit2
-                      className="h-3.5 w-3.5 opacity-0 group-hover:opacity-100 transition-opacity"
-                      strokeWidth={1.5}
-                    />
-                  )}
-                </div>
-              )}
-            </div>
-            {currentId && messages.length > 0 && (
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={handleDownloadTranscript}
-              >
-                Download Transcript
-              </Button>
-            )}
-          </CardHeader>
-
-          <CardContent className="flex-1 flex flex-col space-y-4 min-h-0">
-            <div className="flex gap-2 items-center">
-              <Select
-                value={currentConversation?.system_prompt_id || "none"}
-                onValueChange={(value: string) =>
-                  handleSystemPromptChange(value === "none" ? null : value)
-                }
-              >
-                <SelectTrigger className="w-[300px]">
-                  <SelectValue placeholder="Select System Prompt" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="none">No System Prompt</SelectItem>
-                  {systemPrompts.map((prompt) => (
-                    <SelectItem key={prompt.id} value={prompt.id}>
-                      {prompt.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={handleNewSystemPrompt}
-              >
-                New
-              </Button>
-              <div className="flex-1" />
-              <Button
-                variant="outline"
-                size="icon"
-                className="h-8 w-8"
-                onClick={() =>
-                  messagesEndRef.current?.parentElement?.scrollIntoView({
-                    behavior: "smooth",
-                  })
-                }
-              >
-                ↑
-              </Button>
-            </div>
-
-            <ScrollArea className="flex-1 border rounded-md p-4 min-h-0">
-              <div className="space-y-4">
-                {messages.map((msg, index) => (
-                  <MessageComponent
-                    key={msg.id || index}
-                    message={msg}
-                    onDelete={handleDeleteMessage}
-                    isCached={msg.cache || false}
-                    onCacheChange={handleToggleCache}
-                    onEdit={handleMessageEdit}
+                    onBlur={handleTitleEdit}
+                    onKeyDown={(e: React.KeyboardEvent<HTMLInputElement>) => {
+                      if (e.key === "Enter") handleTitleEdit();
+                      else if (e.key === "Escape") setIsEditingTitle(false);
+                    }}
+                    className="h-7 w-[300px]"
+                    placeholder="Conversation Title"
                   />
-                ))}
-                <div ref={messagesEndRef} />
-              </div>
-            </ScrollArea>
-
-            <div className="flex justify-end">
-              <Button
-                variant="outline"
-                size="icon"
-                className="h-8 w-8"
-                onClick={() =>
-                  messagesEndRef.current?.scrollIntoView({ behavior: "smooth" })
-                }
-              >
-                ↓
-              </Button>
-            </div>
-
-            {error && (
-              <div className="bg-destructive/15 text-destructive px-4 py-2 rounded-md text-sm">
-                {error}
-              </div>
-            )}
-
-            <div className="flex flex-col gap-2">
-              <Textarea
-                className="resize-none"
-                placeholder="Type your message here..."
-                rows={3}
-                value={message}
-                onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) =>
-                  setMessage(e.target.value)
-                }
-                onKeyDown={(e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-                  if (e.key === "Enter" && !e.shiftKey) {
-                    e.preventDefault();
-                    handleSend();
-                  }
-                }}
-              />
-              <div className="flex justify-end items-center gap-4">
-                <div className="flex items-center gap-1.5 scale-90">
-                  <Checkbox
-                    id="pre-cache"
-                    checked={isPreCached}
-                    onCheckedChange={(checked) => {
-                      if (typeof checked === "boolean") {
-                        setIsPreCached(checked);
+                ) : (
+                  <div
+                    className="flex items-center gap-2 group cursor-pointer"
+                    onClick={() => {
+                      if (currentId) {
+                        setEditedTitle(currentConversation?.name || "");
+                        setIsEditingTitle(true);
+                        setTimeout(() => titleInputRef.current?.focus(), 0);
                       }
                     }}
-                  />
-                  <label
-                    htmlFor="pre-cache"
-                    className="text-sm text-muted-foreground cursor-pointer select-none"
                   >
-                    Cache message
-                  </label>
-                </div>
+                    <CardTitle>
+                      {currentId
+                        ? currentConversation?.name || "Untitled"
+                        : "No Conversation Selected"}
+                    </CardTitle>
+                    {currentId && (
+                      <Edit2
+                        className="h-3.5 w-3.5 opacity-0 group-hover:opacity-100 transition-opacity"
+                        strokeWidth={1.5}
+                      />
+                    )}
+                  </div>
+                )}
+              </div>
+              {currentId && messages.length > 0 && (
                 <Button
-                  onClick={handleSend}
-                  disabled={loading || !message.trim()}
+                  variant="outline"
+                  size="sm"
+                  onClick={handleDownloadTranscript}
                 >
-                  {loading ? "Sending..." : "Send"}
+                  Download Transcript
+                </Button>
+              )}
+            </CardHeader>
+
+            <CardContent className="flex-1 flex flex-col space-y-4 min-h-0">
+              <div className="flex gap-2 items-center">
+                <Select
+                  value={currentConversation?.system_prompt_id || "none"}
+                  onValueChange={(value: string) =>
+                    handleSystemPromptChange(value === "none" ? null : value)
+                  }
+                >
+                  <SelectTrigger className="w-[300px]">
+                    <SelectValue placeholder="Select System Prompt" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">No System Prompt</SelectItem>
+                    {systemPrompts.map((prompt) => (
+                      <SelectItem key={prompt.id} value={prompt.id}>
+                        {prompt.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleNewSystemPrompt}
+                >
+                  New
+                </Button>
+                <div className="flex-1" />
+                <Button
+                  variant="outline"
+                  size="icon"
+                  className="h-8 w-8"
+                  onClick={() =>
+                    messagesEndRef.current?.parentElement?.scrollIntoView({
+                      behavior: "smooth",
+                    })
+                  }
+                >
+                  ↑
                 </Button>
               </div>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
+
+              <ScrollArea className="flex-1 border rounded-md p-4 min-h-0">
+                <div className="space-y-4">
+                  {messages.map((msg, index) => (
+                    <MessageComponent
+                      key={msg.id || index}
+                      message={msg}
+                      onDelete={handleDeleteMessage}
+                      isCached={msg.cache || false}
+                      onCacheChange={handleToggleCache}
+                      onEdit={handleMessageEdit}
+                    />
+                  ))}
+                  <div ref={messagesEndRef} />
+                </div>
+              </ScrollArea>
+
+              <div className="flex justify-end">
+                <Button
+                  variant="outline"
+                  size="icon"
+                  className="h-8 w-8"
+                  onClick={() =>
+                    messagesEndRef.current?.scrollIntoView({
+                      behavior: "smooth",
+                    })
+                  }
+                >
+                  ↓
+                </Button>
+              </div>
+
+              {error && (
+                <div className="bg-destructive/15 text-destructive px-4 py-2 rounded-md text-sm">
+                  {error}
+                </div>
+              )}
+
+              <div className="flex flex-col gap-2">
+                <Textarea
+                  className="resize-none"
+                  placeholder="Type your message here..."
+                  rows={3}
+                  value={message}
+                  onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) =>
+                    setMessage(e.target.value)
+                  }
+                  onKeyDown={(e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+                    if (e.key === "Enter" && !e.shiftKey) {
+                      e.preventDefault();
+                      handleSend();
+                    }
+                  }}
+                />
+                <div className="flex justify-end items-center gap-4">
+                  <div className="flex items-center gap-1.5 scale-90">
+                    <Checkbox
+                      id="pre-cache"
+                      checked={isPreCached}
+                      onCheckedChange={(checked) => {
+                        if (typeof checked === "boolean") {
+                          setIsPreCached(checked);
+                        }
+                      }}
+                    />
+                    <label
+                      htmlFor="pre-cache"
+                      className="text-sm text-muted-foreground cursor-pointer select-none"
+                    >
+                      Cache message
+                    </label>
+                  </div>
+                  <Button
+                    onClick={handleSend}
+                    disabled={loading || !message.trim()}
+                  >
+                    {loading ? "Sending..." : "Send"}
+                  </Button>
+                </div>
+              </div>
+            </CardContent>
+          </div>
+        </div>
+      </Card>
     </div>
   );
 }
