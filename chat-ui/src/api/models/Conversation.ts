@@ -4,7 +4,7 @@
 /* eslint-disable */
 import type { Message } from './Message';
 export type Conversation = {
-    id?: (string | null);
+    id: string;
     name: string;
     system_prompt_id?: (string | null);
     model?: string;

@@ -3,42 +3,13 @@
 /* tslint:disable */
 /* eslint-disable */
 import type { Conversation } from '../models/Conversation';
+import type { ConversationCreate } from '../models/ConversationCreate';
 import type { ConversationUpdate } from '../models/ConversationUpdate';
 import type { Message } from '../models/Message';
 import type { CancelablePromise } from '../core/CancelablePromise';
 import { OpenAPI } from '../core/OpenAPI';
 import { request as __request } from '../core/request';
 export class ConversationsService {
-    /**
-     * Create Conversation
-     * Create a new conversation.
-     * @param name
-     * @param systemPromptId
-     * @param model
-     * @param maxTokens
-     * @returns Conversation Successful Response
-     * @throws ApiError
-     */
-    public static createConversationConversationsPost(
-        name: string,
-        systemPromptId?: (string | null),
-        model?: (string | null),
-        maxTokens?: (number | null),
-    ): CancelablePromise<Conversation> {
-        return __request(OpenAPI, {
-            method: 'POST',
-            url: '/conversations',
-            query: {
-                'name': name,
-                'system_prompt_id': systemPromptId,
-                'model': model,
-                'max_tokens': maxTokens,
-            },
-            errors: {
-                422: `Validation Error`,
-            },
-        });
-    }
     /**
      * Get Conversations
      * Get all conversations.
@@ -49,6 +20,26 @@ export class ConversationsService {
         return __request(OpenAPI, {
             method: 'GET',
             url: '/conversations',
+        });
+    }
+    /**
+     * Create Conversation
+     * Create a new conversation.
+     * @param requestBody
+     * @returns Conversation Successful Response
+     * @throws ApiError
+     */
+    public static createConversationConversationsPost(
+        requestBody: ConversationCreate,
+    ): CancelablePromise<Conversation> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/conversations',
+            body: requestBody,
+            mediaType: 'application/json',
+            errors: {
+                422: `Validation Error`,
+            },
         });
     }
     /**

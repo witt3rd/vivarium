@@ -1,6 +1,7 @@
 "use client";
 
 import { Conversation as ConversationType } from "@/api/models/Conversation";
+import { ConversationCreate } from "@/api/models/ConversationCreate";
 import { Message } from "@/api/models/Message";
 import { SystemPrompt } from "@/api/models/SystemPrompt";
 import { ConversationsService } from "@/api/services/ConversationsService";
@@ -39,6 +40,24 @@ export function Conversation() {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const titleInputRef = useRef<HTMLInputElement>(null);
 
+  const createNewConversation = async (addToStart: boolean = true) => {
+    const createParams: ConversationCreate = {
+      name: "New Conversation",
+      id: crypto.randomUUID(),
+    };
+    const conv = await ConversationsService.createConversationConversationsPost(
+      createParams
+    );
+    if (conv.id) {
+      setConversations((prev) =>
+        addToStart ? [conv, ...prev] : [...prev, conv]
+      );
+      setCurrentId(conv.id);
+      setMessages([]);
+    }
+    return conv;
+  };
+
   // Scroll to bottom when messages change
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -53,14 +72,7 @@ export function Conversation() {
         setConversations(convs);
 
         if (convs.length === 0) {
-          const newConv =
-            await ConversationsService.createConversationConversationsPost(
-              "New Conversation"
-            );
-          if (newConv.id) {
-            setConversations([newConv]);
-            setCurrentId(newConv.id);
-          }
+          await createNewConversation(false);
         } else if (convs[0]?.id) {
           setCurrentId(convs[0].id);
         }
@@ -134,15 +146,7 @@ export function Conversation() {
     }
 
     try {
-      const conv =
-        await ConversationsService.createConversationConversationsPost(
-          "New Conversation"
-        );
-      if (conv.id) {
-        setConversations((prev) => [conv, ...prev]);
-        setCurrentId(conv.id);
-        setMessages([]);
-      }
+      await createNewConversation(true);
     } catch (err) {
       console.error("Error creating conversation:", err);
       setError("Failed to create conversation");

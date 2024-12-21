@@ -8,6 +8,7 @@ export { OpenAPI } from './core/OpenAPI';
 export type { OpenAPIConfig } from './core/OpenAPI';
 
 export type { Conversation } from './models/Conversation';
+export type { ConversationCreate } from './models/ConversationCreate';
 export type { ConversationUpdate } from './models/ConversationUpdate';
 export type { HTTPValidationError } from './models/HTTPValidationError';
 export type { Message } from './models/Message';

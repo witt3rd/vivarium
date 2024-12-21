@@ -1,6 +1,6 @@
 import json
 import uuid
-from typing import Any, Dict, List, Optional, TypedDict, cast
+from typing import Any, Dict, List, TypedDict, cast
 
 from anthropic import Anthropic
 from anthropic.types import MessageParam
@@ -8,7 +8,7 @@ from fastapi import APIRouter, HTTPException
 from fastapi.responses import StreamingResponse
 
 from ..system_prompts.storage import load_prompt
-from .schema import Conversation, ConversationUpdate, Message
+from .schema import Conversation, ConversationCreate, ConversationUpdate, Message
 from .storage import (
     delete_conversation,
     list_conversations,
@@ -26,23 +26,19 @@ router = APIRouter(prefix="/conversations", tags=["conversations"])
 
 
 @router.post("", response_model=Conversation)
-async def create_conversation(
-    name: str,
-    system_prompt_id: Optional[str] = None,
-    model: Optional[str] = None,
-    max_tokens: Optional[int] = None,
-) -> Conversation:
+async def create_conversation(conversation: ConversationCreate) -> Conversation:
     """Create a new conversation."""
-    model = model or "claude-3-5-sonnet-20241022"
-    max_tokens = max_tokens or 8192
-    conversation = Conversation(
-        name=name,
-        system_prompt_id=system_prompt_id,
+    model = conversation.model or "claude-3-5-sonnet-20241022"
+    max_tokens = conversation.max_tokens or 8192
+    conversation_obj = Conversation(
+        id=conversation.id,
+        name=conversation.name,
+        system_prompt_id=conversation.system_prompt_id,
         model=model,
         max_tokens=max_tokens,
     )
-    save_conversation(conversation)
-    return conversation
+    save_conversation(conversation_obj)
+    return conversation_obj
 
 
 @router.get("", response_model=List[Conversation])

@@ -14,7 +14,7 @@ class Message(BaseModel):
 
 
 class Conversation(BaseModel):
-    id: Optional[str] = None
+    id: str
     name: str
     system_prompt_id: Optional[str] = None
     model: str = "claude-3-5-sonnet-20241022"  # default model
@@ -28,6 +28,16 @@ class ConversationUpdate(BaseModel):
     """Schema for updating conversation metadata."""
 
     name: str
+    system_prompt_id: Optional[str] = None
+    model: Optional[str] = None
+    max_tokens: Optional[int] = None
+
+
+class ConversationCreate(BaseModel):
+    """Schema for creating a new conversation."""
+
+    name: str
+    id: str
     system_prompt_id: Optional[str] = None
     model: Optional[str] = None
     max_tokens: Optional[int] = None
