@@ -186,9 +186,24 @@ export function MessageComponent({
             />
           </div>
         ) : (
-          <MessageContentComponent
-            content={message.content as MessageContent[]}
-          />
+          <>
+            <MessageContentComponent
+              content={message.content as MessageContent[]}
+            />
+            {message.role === "assistant" && message.usage && (
+              <div className="text-[8px] text-muted-foreground/70 mt-2 flex gap-4">
+                <span>Input: {message.usage.input_tokens}</span>
+                <span>
+                  Cache Created:{" "}
+                  {message.usage.cache_creation_input_tokens ?? 0}
+                </span>
+                <span>
+                  Cache Read: {message.usage.cache_read_input_tokens ?? 0}
+                </span>
+                <span>Output: {message.usage.output_tokens}</span>
+              </div>
+            )}
+          </>
         )}
       </CardContent>
     </Card>

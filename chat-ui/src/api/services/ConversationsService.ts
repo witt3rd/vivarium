@@ -210,4 +210,25 @@ export class ConversationsService {
             },
         });
     }
+    /**
+     * Get Conversation Markdown
+     * Get a conversation in markdown format.
+     * @param conversationId
+     * @returns string Successful Response
+     * @throws ApiError
+     */
+    public static getConversationMarkdownConversationsConversationIdMarkdownGet(
+        conversationId: string,
+    ): CancelablePromise<string> {
+        return __request(OpenAPI, {
+            method: 'GET',
+            url: '/conversations/{conversation_id}/markdown',
+            path: {
+                'conversation_id': conversationId,
+            },
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
 }

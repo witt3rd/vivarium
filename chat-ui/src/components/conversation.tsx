@@ -8,6 +8,7 @@ import { ConversationsService } from "@/api/services/ConversationsService";
 import { SystemPromptsService } from "@/api/services/SystemPromptsService";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import {
@@ -33,6 +34,7 @@ export function Conversation() {
   const [isEditingTitle, setIsEditingTitle] = useState(false);
   const [editedTitle, setEditedTitle] = useState("");
   const [message, setMessage] = useState("");
+  const [isPreCached, setIsPreCached] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -76,8 +78,8 @@ export function Conversation() {
         } else if (convs[0]?.id) {
           setCurrentId(convs[0].id);
         }
-      } catch (err) {
-        console.error("Error initializing:", err);
+      } catch (error: unknown) {
+        console.error("Error initializing:", error);
         setError("Failed to initialize");
       }
     };
@@ -88,8 +90,8 @@ export function Conversation() {
   useEffect(() => {
     SystemPromptsService.getSystemPromptsSystemPromptsGet()
       .then(setSystemPrompts)
-      .catch((err) => {
-        console.error("Error loading system prompts:", err);
+      .catch((error: unknown) => {
+        console.error("Error loading system prompts:", error);
       });
   }, []);
 
@@ -100,7 +102,7 @@ export function Conversation() {
     ConversationsService.getConversationConversationsConversationIdGet(
       currentId
     )
-      .then(async (conv) => {
+      .then(async (conv: ConversationType) => {
         if (conv.system_prompt_id) {
           const prompt =
             await SystemPromptsService.getSystemPromptSystemPromptsPromptIdGet(
@@ -117,14 +119,15 @@ export function Conversation() {
               timestamp: new Date().toISOString(),
               cache: prompt.is_cached,
             },
-            ...(conv.messages?.filter((m) => m.role !== "system") || []),
+            ...(conv.messages?.filter((m: Message) => m.role !== "system") ||
+              []),
           ]);
         } else {
           setMessages(conv.messages || []);
         }
       })
-      .catch((err) => {
-        console.error("Error loading messages:", err);
+      .catch((error: unknown) => {
+        console.error("Error loading messages:", error);
         setError("Failed to load messages");
       });
   }, [currentId]);
@@ -256,9 +259,11 @@ export function Conversation() {
         role: "user",
         content: [{ type: "text", text: message }],
         timestamp: new Date().toISOString(),
+        cache: isPreCached,
       };
       setMessages((prev) => [...prev, userMessage]);
       setMessage("");
+      setIsPreCached(false); // Reset cache flag after sending
 
       // Update conversations list
       setConversations((prev) =>
@@ -349,6 +354,7 @@ export function Conversation() {
                       const lastMessage = newMessages[newMessages.length - 1];
                       if (lastMessage?.role === "assistant") {
                         lastMessage.id = event.message.id;
+                        lastMessage.usage = event.message.usage;
                         setConversations((prev) =>
                           prev.map((c) =>
                             c.id === currentId
@@ -356,7 +362,11 @@ export function Conversation() {
                                   ...c,
                                   messages: (c.messages || []).map((m) =>
                                     m.id === assistantMessage.id
-                                      ? { ...m, id: event.message.id }
+                                      ? {
+                                          ...m,
+                                          id: event.message.id,
+                                          usage: event.message.usage,
+                                        }
                                       : m
                                   ),
                                 }
@@ -416,6 +426,28 @@ export function Conversation() {
         }
       } finally {
         reader.releaseLock();
+      }
+
+      // Fetch the final message to get complete usage information
+      const conversation =
+        await ConversationsService.getConversationConversationsConversationIdGet(
+          currentId
+        );
+      const finalMessage = conversation.messages?.find(
+        (m: Message) => m.id === assistantMessageId
+      );
+      if (finalMessage) {
+        setMessages((prev) => {
+          const newMessages = [...prev];
+          const lastMessage = newMessages[newMessages.length - 1];
+          if (
+            lastMessage?.role === "assistant" &&
+            lastMessage.id === finalMessage.id
+          ) {
+            lastMessage.usage = finalMessage.usage;
+          }
+          return newMessages;
+        });
       }
     } catch (err) {
       console.error("Error sending message:", err);
@@ -489,6 +521,34 @@ export function Conversation() {
   const handleToggleCache = async (messageId: string) => {
     if (!currentId) return;
 
+    // Check if this is a system prompt message
+    const message = messages.find((m) => m.id === messageId);
+    if (message?.role === "system") {
+      try {
+        const updatedPrompt =
+          await SystemPromptsService.updateSystemPromptSystemPromptsPromptIdPut(
+            messageId,
+            {
+              is_cached: !message.cache,
+            }
+          );
+
+        // Update messages state to reflect the change
+        setMessages((prev) =>
+          prev.map((msg) =>
+            msg.id === messageId
+              ? { ...msg, cache: updatedPrompt.is_cached }
+              : msg
+          )
+        );
+      } catch (err) {
+        console.error("Error toggling system prompt cache:", err);
+        setError("Failed to toggle system prompt cache");
+      }
+      return;
+    }
+
+    // Handle regular message cache toggle
     try {
       await ConversationsService.toggleMessageCacheConversationsConversationIdMessagesMessageIdCachePost(
         currentId,
@@ -500,7 +560,7 @@ export function Conversation() {
         )
       );
     } catch (err) {
-      console.error("Error toggling cache:", err);
+      console.error("Error toggling message cache:", err);
       setError("Failed to toggle cache");
     }
   };
@@ -559,6 +619,31 @@ export function Conversation() {
     } catch (err) {
       console.error("Error creating system prompt:", err);
       setError("Failed to create system prompt");
+    }
+  };
+
+  const handleDownloadTranscript = async () => {
+    if (!currentId) return;
+
+    try {
+      const text =
+        await ConversationsService.getConversationMarkdownConversationsConversationIdMarkdownGet(
+          currentId
+        );
+
+      // Create blob and download
+      const blob = new Blob([text], { type: "text/markdown" });
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `${currentConversation?.name || "conversation"}.md`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      window.URL.revokeObjectURL(url);
+    } catch (error: unknown) {
+      console.error("Error downloading transcript:", error);
+      setError("Failed to download transcript");
     }
   };
 
@@ -631,6 +716,15 @@ export function Conversation() {
                 </div>
               )}
             </div>
+            {currentId && messages.length > 0 && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleDownloadTranscript}
+              >
+                Download Transcript
+              </Button>
+            )}
           </CardHeader>
 
           <CardContent className="flex-1 flex flex-col space-y-4 min-h-0">
@@ -684,29 +778,48 @@ export function Conversation() {
               </div>
             )}
 
-            <Textarea
-              className="resize-none"
-              placeholder="Type your message here..."
-              rows={3}
-              value={message}
-              onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) =>
-                setMessage(e.target.value)
-              }
-              onKeyDown={(e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-                if (e.key === "Enter" && !e.shiftKey) {
-                  e.preventDefault();
-                  handleSend();
+            <div className="flex flex-col gap-2">
+              <Textarea
+                className="resize-none"
+                placeholder="Type your message here..."
+                rows={3}
+                value={message}
+                onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) =>
+                  setMessage(e.target.value)
                 }
-              }}
-            />
-
-            <Button
-              onClick={handleSend}
-              disabled={loading || !message.trim()}
-              className="self-end"
-            >
-              {loading ? "Sending..." : "Send"}
-            </Button>
+                onKeyDown={(e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+                  if (e.key === "Enter" && !e.shiftKey) {
+                    e.preventDefault();
+                    handleSend();
+                  }
+                }}
+              />
+              <div className="flex justify-end items-center gap-4">
+                <div className="flex items-center gap-1.5 scale-90">
+                  <Checkbox
+                    id="pre-cache"
+                    checked={isPreCached}
+                    onCheckedChange={(checked) => {
+                      if (typeof checked === "boolean") {
+                        setIsPreCached(checked);
+                      }
+                    }}
+                  />
+                  <label
+                    htmlFor="pre-cache"
+                    className="text-sm text-muted-foreground cursor-pointer select-none"
+                  >
+                    Cache message
+                  </label>
+                </div>
+                <Button
+                  onClick={handleSend}
+                  disabled={loading || !message.trim()}
+                >
+                  {loading ? "Sending..." : "Send"}
+                </Button>
+              </div>
+            </div>
           </CardContent>
         </Card>
       </div>

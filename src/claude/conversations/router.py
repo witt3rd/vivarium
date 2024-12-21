@@ -8,7 +8,13 @@ from fastapi import APIRouter, HTTPException
 from fastapi.responses import StreamingResponse
 
 from ..system_prompts.storage import load_prompt
-from .schema import Conversation, ConversationCreate, ConversationUpdate, Message
+from .schema import (
+    Conversation,
+    ConversationCreate,
+    ConversationUpdate,
+    Message,
+    TokenUsage,
+)
 from .storage import (
     delete_conversation,
     list_conversations,
@@ -164,7 +170,16 @@ async def add_message(conversation_id: str, message: Message) -> StreamingRespon
     system_content = ""
     if conversation.system_prompt_id:
         system_prompt = load_prompt(conversation.system_prompt_id)
-        system_content = system_prompt.content
+        if system_prompt.is_cached:
+            system_content = [
+                {
+                    "type": "text",
+                    "text": system_prompt.content,
+                    "cache_control": {"type": "ephemeral"},
+                }
+            ]
+        else:
+            system_content = system_prompt.content
         print(f"Loaded system prompt: {system_prompt.name}")
         print(f"System content: {system_content}")
     else:
@@ -196,6 +211,7 @@ async def add_message(conversation_id: str, message: Message) -> StreamingRespon
     async def stream_response():
         """Stream the response from Claude."""
         response_text = ""
+        usage_data = None
 
         # Get Claude's streaming response
         stream = client.messages.create(
@@ -217,10 +233,31 @@ async def add_message(conversation_id: str, message: Message) -> StreamingRespon
                 }
 
                 if chunk.type == "message_start":
+                    # Extract usage information if available
+                    message = getattr(chunk, "message", None)
+                    usage = getattr(message, "usage", None) if message else None
+                    print(f"Message from chunk: {message}")
+                    print(f"Raw usage from message: {usage}")
+                    if usage:
+                        usage_data = TokenUsage(
+                            cache_creation_input_tokens=getattr(
+                                usage, "cache_creation_input_tokens", None
+                            ),
+                            cache_read_input_tokens=getattr(
+                                usage, "cache_read_input_tokens", None
+                            ),
+                            input_tokens=getattr(usage, "input_tokens", None),
+                            output_tokens=getattr(usage, "output_tokens", None),
+                        )
+                        print(f"Created TokenUsage: {usage_data.model_dump()}")
+
+                    # Construct message event
                     event["message"] = {
                         "id": assistant_message_id or str(uuid.uuid4()),
                         "role": "assistant",
+                        "usage": usage_data.model_dump() if usage_data else None,
                     }
+                    print(f"Sending event with usage: {event}")
                 elif chunk.type == "content_block_start":
                     event["content_block"] = {
                         "type": "text",
@@ -236,6 +273,14 @@ async def add_message(conversation_id: str, message: Message) -> StreamingRespon
                             "type": "text_delta",
                             "text": delta_text,
                         }
+                elif chunk.type == "message_delta":
+                    # Update output tokens from final usage data
+                    delta_usage = getattr(chunk, "usage", None)
+                    if delta_usage and usage_data:
+                        output_tokens = getattr(delta_usage, "output_tokens", None)
+                        if output_tokens is not None:
+                            usage_data.output_tokens = output_tokens
+                            print(f"Updated output tokens to: {output_tokens}")
 
                 yield f"data: {json.dumps(event)}\n\n"
 
@@ -244,7 +289,9 @@ async def add_message(conversation_id: str, message: Message) -> StreamingRespon
                 id=assistant_message_id or str(uuid.uuid4()),
                 role="assistant",
                 content=[{"type": "text", "text": response_text}],
+                usage=usage_data,
             )
+            print(f"Saving message with usage: {assistant_message.model_dump()}")
             conversation.messages.append(assistant_message)
             save_conversation(conversation)
 
@@ -278,3 +325,38 @@ async def update_conversation(
 
     save_conversation(conversation)
     return conversation
+
+
+@router.get(
+    "/{conversation_id}/markdown",
+    response_model=str,
+    responses={200: {"content": {"text/markdown": {"schema": {"type": "string"}}}}},
+)
+async def get_conversation_markdown(conversation_id: str) -> str:
+    """Get a conversation in markdown format."""
+    conversation = load_conversation(conversation_id)
+
+    lines = [
+        f"# {conversation.name}",
+        "",
+        f"Created: {conversation.created_at}",
+        f"Updated: {conversation.updated_at}",
+        "",
+        "---",
+        "",
+    ]
+
+    for message in conversation.messages or []:
+        role = message.role.capitalize()
+        content = "\n\n".join(
+            str(block["text"])
+            .replace("_", "\\_")
+            .replace("*", "\\*")
+            .replace("`", "\\`")
+            for block in message.content
+            if block["type"] == "text"
+        )
+
+        lines.extend([f"**{role}**: {content}", "", "---", ""])
+
+    return "\n".join(lines)

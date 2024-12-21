@@ -15,6 +15,7 @@ export type { Message } from './models/Message';
 export type { SystemPrompt } from './models/SystemPrompt';
 export type { SystemPromptCreate } from './models/SystemPromptCreate';
 export type { SystemPromptUpdate } from './models/SystemPromptUpdate';
+export type { TokenUsage } from './models/TokenUsage';
 export type { ValidationError } from './models/ValidationError';
 
 export { ConversationsService } from './services/ConversationsService';

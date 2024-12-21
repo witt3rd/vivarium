@@ -2,6 +2,7 @@
 /* istanbul ignore file */
 /* tslint:disable */
 /* eslint-disable */
+import type { TokenUsage } from './TokenUsage';
 export type Message = {
     id?: (string | null);
     role: string;
@@ -9,5 +10,6 @@ export type Message = {
     timestamp?: (string | null);
     cache?: boolean;
     assistant_message_id?: (string | null);
+    usage?: (TokenUsage | null);
 };
 

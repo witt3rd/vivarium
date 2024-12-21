@@ -4,6 +4,15 @@ from typing import Any, Dict, List, Optional
 from pydantic import BaseModel, Field
 
 
+class TokenUsage(BaseModel):
+    """Token usage information from the API response."""
+
+    cache_creation_input_tokens: Optional[int] = None
+    cache_read_input_tokens: Optional[int] = None
+    input_tokens: Optional[int] = None
+    output_tokens: Optional[int] = None
+
+
 class Message(BaseModel):
     id: Optional[str] = None
     role: str
@@ -11,6 +20,7 @@ class Message(BaseModel):
     timestamp: Optional[str] = None
     cache: bool = False
     assistant_message_id: Optional[str] = None  # ID for the assistant's response
+    usage: Optional[TokenUsage] = None  # Token usage information for assistant messages
 
 
 class Conversation(BaseModel):
