@@ -3,10 +3,11 @@
 /* tslint:disable */
 /* eslint-disable */
 export type Message = {
-    id?: string;
+    id?: (string | null);
     role: string;
     content: Array<Record<string, any>>;
     timestamp?: (string | null);
     cache?: boolean;
+    assistant_message_id?: (string | null);
 };
 

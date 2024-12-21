@@ -150,6 +150,12 @@ async def add_message(conversation_id: str, message: Message) -> StreamingRespon
     print(f"Loaded conversation: {conversation.id}")
     print(f"System prompt ID: {conversation.system_prompt_id}")
 
+    # Extract assistant_message_id if provided
+    assistant_message_id = None
+    if hasattr(message, "assistant_message_id"):
+        assistant_message_id = message.assistant_message_id
+        delattr(message, "assistant_message_id")  # Remove it before saving
+
     # Ensure message has an ID
     if not message.id:
         message.id = str(uuid.uuid4())
@@ -216,7 +222,7 @@ async def add_message(conversation_id: str, message: Message) -> StreamingRespon
 
                 if chunk.type == "message_start":
                     event["message"] = {
-                        "id": str(uuid.uuid4()),
+                        "id": assistant_message_id or str(uuid.uuid4()),
                         "role": "assistant",
                     }
                 elif chunk.type == "content_block_start":
@@ -239,7 +245,7 @@ async def add_message(conversation_id: str, message: Message) -> StreamingRespon
 
             # Save the complete response
             assistant_message = Message(
-                id=str(uuid.uuid4()),  # Generate new ID for assistant message
+                id=assistant_message_id or str(uuid.uuid4()),
                 role="assistant",
                 content=[{"type": "text", "text": response_text}],
             )

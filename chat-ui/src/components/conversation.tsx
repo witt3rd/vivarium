@@ -265,9 +265,10 @@ export function Conversation() {
         )
       );
 
-      // Create placeholder for assistant response
+      // Create assistant message with a single ID that will be used throughout
+      const assistantMessageId = crypto.randomUUID();
       const assistantMessage: Message = {
-        id: crypto.randomUUID(),
+        id: assistantMessageId,
         role: "assistant",
         content: [{ type: "text", text: "", format: "markdown" }],
         timestamp: new Date().toISOString(),
@@ -287,7 +288,10 @@ export function Conversation() {
       const response = await fetch(`/api/conversations/${currentId}/messages`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(userMessage),
+        body: JSON.stringify({
+          ...userMessage,
+          assistant_message_id: assistantMessageId, // Pass the ID to backend
+        }),
       });
 
       if (!response.ok)

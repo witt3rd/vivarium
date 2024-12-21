@@ -4,11 +4,13 @@
 /* eslint-disable */
 import type { Message } from './Message';
 export type Conversation = {
-    id?: string;
+    id?: (string | null);
     name: string;
-    messages?: Array<Message>;
     system_prompt_id?: (string | null);
     model?: string;
     max_tokens?: number;
+    messages?: Array<Message>;
+    created_at?: string;
+    updated_at?: string;
 };
 
