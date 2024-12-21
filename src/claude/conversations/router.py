@@ -268,14 +268,11 @@ async def update_conversation(
     """Update conversation metadata."""
     conversation = load_conversation(conversation_id)
 
-    # Update metadata fields
+    # Always update all fields
     conversation.name = update.name
-    if update.system_prompt_id is not None:
-        conversation.system_prompt_id = update.system_prompt_id
-    if update.model is not None:
-        conversation.model = update.model
-    if update.max_tokens is not None:
-        conversation.max_tokens = update.max_tokens
+    conversation.system_prompt_id = update.system_prompt_id
+    conversation.model = update.model or "claude-3-5-sonnet-20241022"
+    conversation.max_tokens = update.max_tokens or 8192
 
     save_conversation(conversation)
     return conversation

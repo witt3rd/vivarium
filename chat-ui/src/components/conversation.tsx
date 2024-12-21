@@ -158,9 +158,9 @@ export function Conversation() {
           currentId,
           {
             name: editedTitle.trim(),
-            system_prompt_id: currentConversation?.system_prompt_id,
-            model: currentConversation?.model,
-            max_tokens: currentConversation?.max_tokens,
+            system_prompt_id: currentConversation?.system_prompt_id ?? null,
+            model: currentConversation?.model ?? "claude-3-5-sonnet-20241022",
+            max_tokens: currentConversation?.max_tokens ?? 8192,
           }
         );
       setConversations((prev) =>
@@ -181,10 +181,10 @@ export function Conversation() {
         await ConversationsService.updateConversationConversationsConversationIdPut(
           currentId,
           {
-            name: currentConversation?.name || "New Conversation",
+            name: currentConversation?.name ?? "New Conversation",
             system_prompt_id: promptId,
-            model: currentConversation?.model,
-            max_tokens: currentConversation?.max_tokens,
+            model: currentConversation?.model ?? "claude-3-5-sonnet-20241022",
+            max_tokens: currentConversation?.max_tokens ?? 8192,
           }
         );
       setConversations((prev) =>
@@ -420,6 +420,45 @@ export function Conversation() {
   const handleDeleteMessage = async (messageId: string) => {
     if (!currentId) return;
 
+    // Check if this is a system prompt message
+    const message = messages.find((m) => m.id === messageId);
+    if (message?.role === "system") {
+      // Confirm deletion
+      if (
+        !window.confirm("Are you sure you want to delete this system prompt?")
+      ) {
+        return;
+      }
+
+      try {
+        const updated =
+          await ConversationsService.updateConversationConversationsConversationIdPut(
+            currentId,
+            {
+              name: currentConversation?.name ?? "New Conversation",
+              system_prompt_id: null,
+              model: currentConversation?.model ?? "claude-3-5-sonnet-20241022",
+              max_tokens: currentConversation?.max_tokens ?? 8192,
+            }
+          );
+
+        await SystemPromptsService.deleteSystemPromptSystemPromptsPromptIdDelete(
+          messageId
+        );
+
+        setSystemPrompts((prev) => prev.filter((p) => p.id !== messageId));
+        setConversations((prev) =>
+          prev.map((c) => (c.id === currentId ? updated : c))
+        );
+        setMessages((prev) => prev.filter((m) => m.id !== messageId));
+      } catch (err) {
+        console.error("Error deleting system prompt:", err);
+        setError("Failed to delete system prompt");
+      }
+      return;
+    }
+
+    // Handle regular message deletion
     try {
       await ConversationsService.deleteMessageConversationsConversationIdMessagesMessageIdDelete(
         currentId,
@@ -455,6 +494,63 @@ export function Conversation() {
     } catch (err) {
       console.error("Error toggling cache:", err);
       setError("Failed to toggle cache");
+    }
+  };
+
+  const handleMessageEdit = async (editedMessage: Message) => {
+    if (!currentId || !editedMessage.id) return;
+
+    try {
+      if (editedMessage.role === "system") {
+        // System prompt update
+        const updatedPrompt =
+          await SystemPromptsService.updateSystemPromptSystemPromptsPromptIdPut(
+            editedMessage.id,
+            {
+              name: editedMessage.content[0].text,
+              content: editedMessage.content[1].text,
+            }
+          );
+
+        // Update systemPrompts state for the dropdown
+        setSystemPrompts((prev) =>
+          prev.map((p) => (p.id === editedMessage.id ? updatedPrompt : p))
+        );
+      } else {
+        // Regular message update
+        await ConversationsService.updateMessageConversationsConversationIdMessagesMessageIdPut(
+          currentId,
+          editedMessage.id,
+          editedMessage
+        );
+      }
+
+      // Update messages state
+      setMessages((prev) =>
+        prev.map((msg) => (msg.id === editedMessage.id ? editedMessage : msg))
+      );
+    } catch (err) {
+      console.error("Error updating message:", err);
+      setError("Failed to update message");
+    }
+  };
+
+  const handleNewSystemPrompt = async () => {
+    try {
+      const newPrompt =
+        await SystemPromptsService.createSystemPromptSystemPromptsPost({
+          name: "New System Prompt",
+          content: "",
+          is_cached: false,
+        });
+      setSystemPrompts((prev) => [...prev, newPrompt]);
+
+      if (currentId) {
+        handleSystemPromptChange(newPrompt.id);
+      }
+    } catch (err) {
+      console.error("Error creating system prompt:", err);
+      setError("Failed to create system prompt");
     }
   };
 
@@ -530,24 +626,33 @@ export function Conversation() {
           </CardHeader>
 
           <CardContent className="flex-1 flex flex-col space-y-4 min-h-0">
-            <Select
-              value={currentConversation?.system_prompt_id || "none"}
-              onValueChange={(value: string) =>
-                handleSystemPromptChange(value === "none" ? null : value)
-              }
-            >
-              <SelectTrigger className="w-[300px]">
-                <SelectValue placeholder="Select System Prompt" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="none">No System Prompt</SelectItem>
-                {systemPrompts.map((prompt) => (
-                  <SelectItem key={prompt.id} value={prompt.id}>
-                    {prompt.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <div className="flex gap-2 items-center">
+              <Select
+                value={currentConversation?.system_prompt_id || "none"}
+                onValueChange={(value: string) =>
+                  handleSystemPromptChange(value === "none" ? null : value)
+                }
+              >
+                <SelectTrigger className="w-[300px]">
+                  <SelectValue placeholder="Select System Prompt" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">No System Prompt</SelectItem>
+                  {systemPrompts.map((prompt) => (
+                    <SelectItem key={prompt.id} value={prompt.id}>
+                      {prompt.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleNewSystemPrompt}
+              >
+                New
+              </Button>
+            </div>
 
             <ScrollArea className="flex-1 border rounded-md p-4 min-h-0">
               <div className="space-y-4">
@@ -558,6 +663,7 @@ export function Conversation() {
                     onDelete={handleDeleteMessage}
                     isCached={msg.cache || false}
                     onCacheChange={handleToggleCache}
+                    onEdit={handleMessageEdit}
                   />
                 ))}
                 <div ref={messagesEndRef} />
