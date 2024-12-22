@@ -118,15 +118,6 @@ export function Conversation({
       }
       setIsPreCached(false); // Reset cache flag after sending
 
-      // Update conversations list
-      updateConversations((prev) =>
-        prev.map((c) =>
-          c.id === currentId
-            ? { ...c, messages: [...(c.messages || []), userMessage] }
-            : c
-        )
-      );
-
       // Create assistant message with a single ID that will be used throughout
       const assistantMessageId = crypto.randomUUID();
       const assistantMessage: Message = {
@@ -137,11 +128,18 @@ export function Conversation({
       };
       setMessages((prev) => [...prev, assistantMessage]);
 
-      // Update conversations list with assistant message
+      // Update conversations list with both messages in a single update
       updateConversations((prev) =>
         prev.map((c) =>
           c.id === currentId
-            ? { ...c, messages: [...(c.messages || []), assistantMessage] }
+            ? {
+                ...c,
+                messages: [
+                  ...(c.messages || []),
+                  userMessage,
+                  assistantMessage,
+                ],
+              }
             : c
         )
       );
@@ -208,24 +206,6 @@ export function Conversation({
                       if (lastMessage?.role === "assistant") {
                         lastMessage.id = event.message.id;
                         lastMessage.usage = event.message.usage;
-                        updateConversations((prev) =>
-                          prev.map((c) =>
-                            c.id === currentId
-                              ? {
-                                  ...c,
-                                  messages: (c.messages || []).map((m) =>
-                                    m.id === assistantMessage.id
-                                      ? {
-                                          ...m,
-                                          id: event.message.id,
-                                          usage: event.message.usage,
-                                        }
-                                      : m
-                                  ),
-                                }
-                              : c
-                          )
-                        );
                       }
                       return newMessages;
                     });
@@ -238,7 +218,6 @@ export function Conversation({
                     typeof event.delta.text === "string"
                   ) {
                     responseText += event.delta.text;
-                    let updatedMessage: Message | null = null;
 
                     setMessages((prev) => {
                       const newMessages = [...prev];
@@ -251,28 +230,9 @@ export function Conversation({
                             format: "markdown",
                           },
                         ];
-                        updatedMessage = { ...lastMessage };
                       }
                       return newMessages;
                     });
-
-                    // Update conversation list with new content
-                    if (updatedMessage) {
-                      updateConversations((prev) =>
-                        prev.map((c) =>
-                          c.id === currentId
-                            ? {
-                                ...c,
-                                messages: (c.messages || []).map((m) =>
-                                  m.id === updatedMessage.id
-                                    ? updatedMessage
-                                    : m
-                                ),
-                              }
-                            : c
-                        )
-                      );
-                    }
                   }
                   break;
               }
