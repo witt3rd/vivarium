@@ -37,13 +37,18 @@ export function Conversation({
   const [messages, setMessages] = useState<Message[]>([]);
   const [systemPrompts, setSystemPrompts] = useState<SystemPrompt[]>([]);
 
-  // Initialize with newest conversation if available
+  // Initialize and handle conversation changes
   useEffect(() => {
-    if (!currentId && conversations.length > 0) {
-      const [newestConversation] = sortConversations(conversations);
-      setCurrentId(newestConversation.id);
+    if (conversations.length > 0) {
+      if (!currentId) {
+        const [newestConversation] = sortConversations(conversations);
+        setCurrentId(newestConversation.id);
+      } else if (!conversations.find((c) => c.id === currentId)) {
+        const [newestConversation] = sortConversations(conversations);
+        setCurrentId(newestConversation.id);
+      }
     }
-  }, [conversations]);
+  }, [conversations]); // Only run when conversations changes
 
   // UI state
   const [isEditingTitle, setIsEditingTitle] = useState(false);
@@ -233,6 +238,7 @@ export function Conversation({
                     typeof event.delta.text === "string"
                   ) {
                     responseText += event.delta.text;
+                    let updatedMessage: Message | null = null;
 
                     setMessages((prev) => {
                       const newMessages = [...prev];
@@ -245,24 +251,28 @@ export function Conversation({
                             format: "markdown",
                           },
                         ];
-                        // Update conversation list with new content
-                        updateConversations((prev) =>
-                          prev.map((c) =>
-                            c.id === currentId
-                              ? {
-                                  ...c,
-                                  messages: (c.messages || []).map((m) =>
-                                    m.id === lastMessage.id
-                                      ? { ...m, content: lastMessage.content }
-                                      : m
-                                  ),
-                                }
-                              : c
-                          )
-                        );
+                        updatedMessage = { ...lastMessage };
                       }
                       return newMessages;
                     });
+
+                    // Update conversation list with new content
+                    if (updatedMessage) {
+                      updateConversations((prev) =>
+                        prev.map((c) =>
+                          c.id === currentId
+                            ? {
+                                ...c,
+                                messages: (c.messages || []).map((m) =>
+                                  m.id === updatedMessage.id
+                                    ? updatedMessage
+                                    : m
+                                ),
+                              }
+                            : c
+                        )
+                      );
+                    }
                   }
                   break;
               }
@@ -412,16 +422,6 @@ export function Conversation({
   };
 
   const handleNewConversation = async () => {
-    // Only prevent new conversation if current one is completely unused
-    if (
-      currentId &&
-      currentConversation &&
-      (!messages || messages.length === 0) &&
-      currentConversation.name === "New Conversation"
-    ) {
-      return;
-    }
-
     try {
       const createParams: ConversationCreate = {
         name: "New Conversation",
@@ -434,7 +434,6 @@ export function Conversation({
       if (conv.id) {
         updateConversations((prev) => [conv, ...prev]);
         setCurrentId(conv.id);
-        setMessages([]);
       }
     } catch (err) {
       console.error("Error creating conversation:", err);
