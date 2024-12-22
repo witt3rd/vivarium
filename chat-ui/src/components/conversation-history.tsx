@@ -50,15 +50,15 @@ export function ConversationHistory({
     switch (sortOption) {
       case "new-to-old":
         return [...result].sort((a, b) => {
-          const aTime = a.messages?.[a.messages.length - 1]?.timestamp || "";
-          const bTime = b.messages?.[b.messages.length - 1]?.timestamp || "";
-          return bTime.localeCompare(aTime);
+          const aTime = new Date(a.updated_at || 0).getTime();
+          const bTime = new Date(b.updated_at || 0).getTime();
+          return bTime - aTime;
         });
       case "old-to-new":
         return [...result].sort((a, b) => {
-          const aTime = a.messages?.[a.messages.length - 1]?.timestamp || "";
-          const bTime = b.messages?.[b.messages.length - 1]?.timestamp || "";
-          return aTime.localeCompare(bTime);
+          const aTime = new Date(a.updated_at || 0).getTime();
+          const bTime = new Date(b.updated_at || 0).getTime();
+          return aTime - bTime;
         });
       case "a-to-z":
         return [...result].sort((a, b) =>
