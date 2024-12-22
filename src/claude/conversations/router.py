@@ -360,3 +360,36 @@ async def get_conversation_markdown(conversation_id: str) -> str:
         lines.extend([f"**{role}**: {content}", "", "---", ""])
 
     return "\n".join(lines)
+
+
+@router.post("/{conversation_id}/clone", response_model=Conversation)
+async def clone_conversation(conversation_id: str) -> Conversation:
+    """Clone an existing conversation."""
+    # Get source conversation
+    source = load_conversation(conversation_id)
+
+    # Create new conversation with same settings
+    new_id = str(uuid.uuid4())
+    clone = Conversation(
+        id=new_id,
+        name=f"{source.name} [CLONE]",
+        system_prompt_id=source.system_prompt_id,
+        model=source.model,
+        max_tokens=source.max_tokens,
+        messages=[],
+    )
+
+    # Clone all messages with new IDs
+    for msg in source.messages:
+        new_msg = Message(
+            id=str(uuid.uuid4()),
+            role=msg.role,
+            content=msg.content,
+            timestamp=msg.timestamp,
+            cache=msg.cache,
+            usage=msg.usage,
+        )
+        clone.messages.append(new_msg)
+
+    save_conversation(clone)
+    return clone

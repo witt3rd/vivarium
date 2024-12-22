@@ -18,9 +18,10 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Textarea } from "@/components/ui/textarea";
+import { SmallTextarea } from "@/components/ui/small-inputs";
+import debounce from "lodash/debounce";
 import { Edit2 } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ConversationHistory } from "./conversation-history";
 import { MessageComponent } from "./message";
 
@@ -47,6 +48,290 @@ export function Conversation({
   const currentConversation = conversations.find((c) => c.id === currentId);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const titleInputRef = useRef<HTMLInputElement>(null);
+  const messageInputRef = useRef<HTMLTextAreaElement>(null);
+
+  // Optimized state updates with proper types
+  const updateConversations = useCallback(
+    (updater: (prev: ConversationType[]) => ConversationType[]) => {
+      onConversationsChange(updater(conversations));
+    },
+    [conversations, onConversationsChange]
+  );
+
+  // Memoized send handler
+  const handleSend = useCallback(async () => {
+    if (!currentId || !message.trim()) return;
+
+    try {
+      setLoading(true);
+      setError(null);
+
+      // Clean up any empty conversations except current one
+      const emptyConvs = conversations.filter(
+        (c) => c.id !== currentId && isEmptyConversation(c)
+      );
+
+      // Delete empty conversations
+      await Promise.all(
+        emptyConvs.map(async (conv) => {
+          if (conv.id) {
+            try {
+              await ConversationsService.removeConversationConversationsConversationIdDelete(
+                conv.id
+              );
+              updateConversations((prev) =>
+                prev.filter((c) => c.id !== conv.id)
+              );
+            } catch (err) {
+              console.error("Error cleaning up empty conversation:", err);
+            }
+          }
+        })
+      );
+
+      // Add user message to UI immediately
+      const userMessage: Message = {
+        id: crypto.randomUUID(),
+        role: "user",
+        content: [{ type: "text", text: message }],
+        timestamp: new Date().toISOString(),
+        cache: isPreCached,
+      };
+      setMessages((prev) => [...prev, userMessage]);
+      setMessage("");
+      if (messageInputRef.current) {
+        messageInputRef.current.value = "";
+      }
+      setIsPreCached(false); // Reset cache flag after sending
+
+      // Update conversations list
+      updateConversations((prev) =>
+        prev.map((c) =>
+          c.id === currentId
+            ? { ...c, messages: [...(c.messages || []), userMessage] }
+            : c
+        )
+      );
+
+      // Create assistant message with a single ID that will be used throughout
+      const assistantMessageId = crypto.randomUUID();
+      const assistantMessage: Message = {
+        id: assistantMessageId,
+        role: "assistant",
+        content: [{ type: "text", text: "", format: "markdown" }],
+        timestamp: new Date().toISOString(),
+      };
+      setMessages((prev) => [...prev, assistantMessage]);
+
+      // Update conversations list with assistant message
+      updateConversations((prev) =>
+        prev.map((c) =>
+          c.id === currentId
+            ? { ...c, messages: [...(c.messages || []), assistantMessage] }
+            : c
+        )
+      );
+
+      // Stream response
+      const response = await fetch(`/api/conversations/${currentId}/messages`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          ...userMessage,
+          assistant_message_id: assistantMessageId, // Pass the ID to backend
+        }),
+      });
+
+      if (!response.ok)
+        throw new Error(`HTTP error! status: ${response.status}`);
+
+      const reader = response.body?.getReader();
+      if (!reader) throw new Error("No reader available");
+
+      const decoder = new TextDecoder();
+      let responseText = "";
+
+      try {
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+
+          const chunk = decoder.decode(value);
+          const lines = chunk.split("\n");
+
+          for (const line of lines) {
+            if (!line.startsWith("data: ")) continue;
+
+            const data = line.slice(6);
+            if (data === "[DONE]") break;
+
+            try {
+              if (!data.trim().startsWith("{")) continue;
+
+              const event = JSON.parse(data);
+
+              switch (event.type) {
+                case "message_start":
+                  if (event.message.role === "user") {
+                    setMessages((prev) => {
+                      const newMessages = [...prev];
+                      const userMessageIndex = newMessages.findIndex(
+                        (msg) =>
+                          msg.role === "user" && msg.id === userMessage.id
+                      );
+                      if (userMessageIndex !== -1) {
+                        newMessages[userMessageIndex] = {
+                          ...newMessages[userMessageIndex],
+                          id: event.message.id,
+                        };
+                      }
+                      return newMessages;
+                    });
+                  } else {
+                    setMessages((prev) => {
+                      const newMessages = [...prev];
+                      const lastMessage = newMessages[newMessages.length - 1];
+                      if (lastMessage?.role === "assistant") {
+                        lastMessage.id = event.message.id;
+                        lastMessage.usage = event.message.usage;
+                        updateConversations((prev) =>
+                          prev.map((c) =>
+                            c.id === currentId
+                              ? {
+                                  ...c,
+                                  messages: (c.messages || []).map((m) =>
+                                    m.id === assistantMessage.id
+                                      ? {
+                                          ...m,
+                                          id: event.message.id,
+                                          usage: event.message.usage,
+                                        }
+                                      : m
+                                  ),
+                                }
+                              : c
+                          )
+                        );
+                      }
+                      return newMessages;
+                    });
+                  }
+                  break;
+
+                case "content_block_delta":
+                  if (
+                    event.delta?.type === "text_delta" &&
+                    typeof event.delta.text === "string"
+                  ) {
+                    responseText += event.delta.text;
+
+                    setMessages((prev) => {
+                      const newMessages = [...prev];
+                      const lastMessage = newMessages[newMessages.length - 1];
+                      if (lastMessage?.role === "assistant") {
+                        lastMessage.content = [
+                          {
+                            type: "text",
+                            text: responseText,
+                            format: "markdown",
+                          },
+                        ];
+                        // Update conversation list with new content
+                        updateConversations((prev) =>
+                          prev.map((c) =>
+                            c.id === currentId
+                              ? {
+                                  ...c,
+                                  messages: (c.messages || []).map((m) =>
+                                    m.id === lastMessage.id
+                                      ? { ...m, content: lastMessage.content }
+                                      : m
+                                  ),
+                                }
+                              : c
+                          )
+                        );
+                      }
+                      return newMessages;
+                    });
+                  }
+                  break;
+              }
+            } catch (err) {
+              console.error("Error processing event:", err);
+              continue;
+            }
+          }
+        }
+      } finally {
+        reader.releaseLock();
+      }
+
+      // Fetch the final message to get complete usage information
+      const conversation =
+        await ConversationsService.getConversationConversationsConversationIdGet(
+          currentId
+        );
+      const finalMessage = conversation.messages?.find(
+        (m: Message) => m.id === assistantMessageId
+      );
+      if (finalMessage) {
+        setMessages((prev) => {
+          const newMessages = [...prev];
+          const lastMessage = newMessages[newMessages.length - 1];
+          if (
+            lastMessage?.role === "assistant" &&
+            lastMessage.id === finalMessage.id
+          ) {
+            lastMessage.usage = finalMessage.usage;
+          }
+          return newMessages;
+        });
+      }
+    } catch (err) {
+      console.error("Error sending message:", err);
+      setError("Failed to send message");
+    } finally {
+      setLoading(false);
+    }
+  }, [currentId, message, isPreCached, conversations, updateConversations]);
+
+  // Memoized message input handlers
+  const debouncedSetMessage = useMemo(
+    () =>
+      debounce((value: string) => {
+        setMessage(value);
+      }, 100),
+    []
+  );
+
+  const handleMessageChange = useCallback(
+    (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+      const value = e.target.value;
+      // Update the DOM value immediately for responsive typing
+      if (messageInputRef.current) {
+        messageInputRef.current.value = value;
+      }
+      // Debounce the state update
+      debouncedSetMessage(value);
+    },
+    [debouncedSetMessage]
+  );
+
+  const handleMessageSubmit = useCallback(() => {
+    const value = messageInputRef.current?.value || "";
+    if (value.trim() && !loading) {
+      setMessage(value);
+      handleSend();
+    }
+  }, [loading, handleSend]);
+
+  // Cleanup debounce on unmount
+  useEffect(() => {
+    return () => {
+      debouncedSetMessage.cancel();
+    };
+  }, [debouncedSetMessage]);
 
   // Load collapsed state from localStorage
   useEffect(() => {
@@ -138,7 +423,7 @@ export function Conversation({
           createParams
         );
       if (conv.id) {
-        onConversationsChange([conv, ...conversations]);
+        updateConversations((prev) => [conv, ...prev]);
         setCurrentId(conv.id);
         setMessages([]);
       }
@@ -162,10 +447,8 @@ export function Conversation({
             max_tokens: currentConversation?.max_tokens ?? 8192,
           }
         );
-      onConversationsChange(
-        conversations.map((c: ConversationType) =>
-          c.id === currentId ? updated : c
-        )
+      updateConversations((prev) =>
+        prev.map((c: ConversationType) => (c.id === currentId ? updated : c))
       );
       setIsEditingTitle(false);
     } catch (err) {
@@ -188,7 +471,7 @@ export function Conversation({
             max_tokens: currentConversation?.max_tokens ?? 8192,
           }
         );
-      onConversationsChange((prev) =>
+      updateConversations((prev) =>
         prev.map((c) => (c.id === currentId ? updated : c))
       );
 
@@ -216,240 +499,6 @@ export function Conversation({
     } catch (err) {
       console.error("Error updating system prompt:", err);
       setError("Failed to update system prompt");
-    }
-  };
-
-  const handleSend = async () => {
-    if (!currentId || !message.trim()) return;
-
-    try {
-      setLoading(true);
-      setError(null);
-
-      // Clean up any empty conversations except current one
-      const emptyConvs = conversations.filter(
-        (c) => c.id !== currentId && isEmptyConversation(c)
-      );
-
-      // Delete empty conversations
-      await Promise.all(
-        emptyConvs.map(async (conv) => {
-          if (conv.id) {
-            try {
-              await ConversationsService.removeConversationConversationsConversationIdDelete(
-                conv.id
-              );
-              onConversationsChange((prev) =>
-                prev.filter((c) => c.id !== conv.id)
-              );
-            } catch (err) {
-              console.error("Error cleaning up empty conversation:", err);
-            }
-          }
-        })
-      );
-
-      // Add user message to UI immediately
-      const userMessage: Message = {
-        id: crypto.randomUUID(),
-        role: "user",
-        content: [{ type: "text", text: message }],
-        timestamp: new Date().toISOString(),
-        cache: isPreCached,
-      };
-      setMessages((prev) => [...prev, userMessage]);
-      setMessage("");
-      setIsPreCached(false); // Reset cache flag after sending
-
-      // Update conversations list
-      onConversationsChange((prev) =>
-        prev.map((c) =>
-          c.id === currentId
-            ? { ...c, messages: [...(c.messages || []), userMessage] }
-            : c
-        )
-      );
-
-      // Create assistant message with a single ID that will be used throughout
-      const assistantMessageId = crypto.randomUUID();
-      const assistantMessage: Message = {
-        id: assistantMessageId,
-        role: "assistant",
-        content: [{ type: "text", text: "", format: "markdown" }],
-        timestamp: new Date().toISOString(),
-      };
-      setMessages((prev) => [...prev, assistantMessage]);
-
-      // Update conversations list with assistant message
-      onConversationsChange((prev) =>
-        prev.map((c) =>
-          c.id === currentId
-            ? { ...c, messages: [...(c.messages || []), assistantMessage] }
-            : c
-        )
-      );
-
-      // Stream response
-      const response = await fetch(`/api/conversations/${currentId}/messages`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          ...userMessage,
-          assistant_message_id: assistantMessageId, // Pass the ID to backend
-        }),
-      });
-
-      if (!response.ok)
-        throw new Error(`HTTP error! status: ${response.status}`);
-
-      const reader = response.body?.getReader();
-      if (!reader) throw new Error("No reader available");
-
-      const decoder = new TextDecoder();
-      let responseText = "";
-
-      try {
-        while (true) {
-          const { done, value } = await reader.read();
-          if (done) break;
-
-          const chunk = decoder.decode(value);
-          const lines = chunk.split("\n");
-
-          for (const line of lines) {
-            if (!line.startsWith("data: ")) continue;
-
-            const data = line.slice(6);
-            if (data === "[DONE]") break;
-
-            try {
-              if (!data.trim().startsWith("{")) continue;
-
-              const event = JSON.parse(data);
-
-              switch (event.type) {
-                case "message_start":
-                  if (event.message.role === "user") {
-                    setMessages((prev) => {
-                      const newMessages = [...prev];
-                      const userMessageIndex = newMessages.findIndex(
-                        (msg) =>
-                          msg.role === "user" && msg.id === userMessage.id
-                      );
-                      if (userMessageIndex !== -1) {
-                        newMessages[userMessageIndex] = {
-                          ...newMessages[userMessageIndex],
-                          id: event.message.id,
-                        };
-                      }
-                      return newMessages;
-                    });
-                  } else {
-                    setMessages((prev) => {
-                      const newMessages = [...prev];
-                      const lastMessage = newMessages[newMessages.length - 1];
-                      if (lastMessage?.role === "assistant") {
-                        lastMessage.id = event.message.id;
-                        lastMessage.usage = event.message.usage;
-                        onConversationsChange((prev) =>
-                          prev.map((c) =>
-                            c.id === currentId
-                              ? {
-                                  ...c,
-                                  messages: (c.messages || []).map((m) =>
-                                    m.id === assistantMessage.id
-                                      ? {
-                                          ...m,
-                                          id: event.message.id,
-                                          usage: event.message.usage,
-                                        }
-                                      : m
-                                  ),
-                                }
-                              : c
-                          )
-                        );
-                      }
-                      return newMessages;
-                    });
-                  }
-                  break;
-
-                case "content_block_delta":
-                  if (
-                    event.delta?.type === "text_delta" &&
-                    typeof event.delta.text === "string"
-                  ) {
-                    responseText += event.delta.text;
-
-                    setMessages((prev) => {
-                      const newMessages = [...prev];
-                      const lastMessage = newMessages[newMessages.length - 1];
-                      if (lastMessage?.role === "assistant") {
-                        lastMessage.content = [
-                          {
-                            type: "text",
-                            text: responseText,
-                            format: "markdown",
-                          },
-                        ];
-                        // Update conversation list with new content
-                        onConversationsChange((prev) =>
-                          prev.map((c) =>
-                            c.id === currentId
-                              ? {
-                                  ...c,
-                                  messages: (c.messages || []).map((m) =>
-                                    m.id === lastMessage.id
-                                      ? { ...m, content: lastMessage.content }
-                                      : m
-                                  ),
-                                }
-                              : c
-                          )
-                        );
-                      }
-                      return newMessages;
-                    });
-                  }
-                  break;
-              }
-            } catch (err) {
-              console.error("Error processing event:", err);
-              continue;
-            }
-          }
-        }
-      } finally {
-        reader.releaseLock();
-      }
-
-      // Fetch the final message to get complete usage information
-      const conversation =
-        await ConversationsService.getConversationConversationsConversationIdGet(
-          currentId
-        );
-      const finalMessage = conversation.messages?.find(
-        (m: Message) => m.id === assistantMessageId
-      );
-      if (finalMessage) {
-        setMessages((prev) => {
-          const newMessages = [...prev];
-          const lastMessage = newMessages[newMessages.length - 1];
-          if (
-            lastMessage?.role === "assistant" &&
-            lastMessage.id === finalMessage.id
-          ) {
-            lastMessage.usage = finalMessage.usage;
-          }
-          return newMessages;
-        });
-      }
-    } catch (err) {
-      console.error("Error sending message:", err);
-      setError("Failed to send message");
-    } finally {
-      setLoading(false);
     }
   };
 
@@ -483,7 +532,7 @@ export function Conversation({
         );
 
         setSystemPrompts((prev) => prev.filter((p) => p.id !== messageId));
-        onConversationsChange((prev) =>
+        updateConversations((prev) =>
           prev.map((c) => (c.id === currentId ? updated : c))
         );
         setMessages((prev) => prev.filter((m) => m.id !== messageId));
@@ -501,7 +550,7 @@ export function Conversation({
         messageId
       );
       setMessages((prev) => prev.filter((msg) => msg.id !== messageId));
-      onConversationsChange((prev) =>
+      updateConversations((prev) =>
         prev.map((c) =>
           c.id === currentId
             ? { ...c, messages: c.messages?.filter((m) => m.id !== messageId) }
@@ -656,13 +705,9 @@ export function Conversation({
               await ConversationsService.removeConversationConversationsConversationIdDelete(
                 id
               );
-              onConversationsChange(
-                conversations.filter((c: ConversationType) => c.id !== id)
-              );
+              updateConversations((prev) => prev.filter((c) => c.id !== id));
               if (currentId === id) {
-                const nextId = conversations.find(
-                  (c: ConversationType) => c.id !== id
-                )?.id;
+                const nextId = conversations.find((c) => c.id !== id)?.id;
                 setCurrentId(nextId || null);
                 setMessages([]);
               }
@@ -719,13 +764,41 @@ export function Conversation({
               )}
             </div>
             {currentId && messages.length > 0 && (
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={handleDownloadTranscript}
-              >
-                Download Transcript
-              </Button>
+              <div className="flex gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={async () => {
+                    try {
+                      const response = await fetch(
+                        `/api/conversations/${currentId}/clone`,
+                        {
+                          method: "POST",
+                        }
+                      );
+                      if (!response.ok)
+                        throw new Error("Failed to clone conversation");
+                      const clonedConv: ConversationType =
+                        await response.json();
+                      updateConversations((prev) => [clonedConv, ...prev]);
+                      setCurrentId(clonedConv.id);
+                      setMessages(clonedConv.messages || []);
+                    } catch (err) {
+                      console.error("Error cloning conversation:", err);
+                      setError("Failed to clone conversation");
+                    }
+                  }}
+                >
+                  Clone
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleDownloadTranscript}
+                >
+                  Download Transcript
+                </Button>
+              </div>
             )}
           </CardHeader>
 
@@ -758,9 +831,9 @@ export function Conversation({
               </Button>
               <div className="flex-1" />
               <Button
-                variant="outline"
+                variant="ghost"
                 size="icon"
-                className="h-8 w-8"
+                className="p-0 h-5 w-5"
                 onClick={() =>
                   messagesEndRef.current?.parentElement?.scrollIntoView({
                     behavior: "smooth",
@@ -789,9 +862,9 @@ export function Conversation({
 
             <div className="flex justify-end">
               <Button
-                variant="outline"
+                variant="ghost"
                 size="icon"
-                className="h-8 w-8"
+                className="p-0 h-5 w-5"
                 onClick={() =>
                   messagesEndRef.current?.scrollIntoView({
                     behavior: "smooth",
@@ -803,24 +876,23 @@ export function Conversation({
             </div>
 
             {error && (
-              <div className="bg-destructive/15 text-destructive px-4 py-2 rounded-md text-sm">
+              <div className="bg-destructive/15 text-destructive px-4 py-2 rounded-md text-2xs">
                 {error}
               </div>
             )}
 
             <div className="flex flex-col gap-2">
-              <Textarea
+              <SmallTextarea
+                ref={messageInputRef}
                 className="resize-none"
                 placeholder="Type your message here..."
                 rows={3}
-                value={message}
-                onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) =>
-                  setMessage(e.target.value)
-                }
+                defaultValue=""
+                onChange={handleMessageChange}
                 onKeyDown={(e: React.KeyboardEvent<HTMLTextAreaElement>) => {
                   if (e.key === "Enter" && !e.shiftKey) {
                     e.preventDefault();
-                    handleSend();
+                    handleMessageSubmit();
                   }
                 }}
               />
@@ -837,14 +909,17 @@ export function Conversation({
                   />
                   <label
                     htmlFor="pre-cache"
-                    className="text-sm text-muted-foreground cursor-pointer select-none"
+                    className="text-2xs text-muted-foreground cursor-pointer select-none"
                   >
                     Cache message
                   </label>
                 </div>
                 <Button
-                  onClick={handleSend}
-                  disabled={loading || !message.trim()}
+                  size="sm"
+                  onClick={handleMessageSubmit}
+                  disabled={
+                    loading || !(messageInputRef.current?.value || "").trim()
+                  }
                 >
                   {loading ? "Sending..." : "Send"}
                 </Button>

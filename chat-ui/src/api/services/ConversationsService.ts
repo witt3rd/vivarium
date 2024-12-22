@@ -231,4 +231,25 @@ export class ConversationsService {
             },
         });
     }
+    /**
+     * Clone Conversation
+     * Clone an existing conversation.
+     * @param conversationId
+     * @returns Conversation Successful Response
+     * @throws ApiError
+     */
+    public static cloneConversationConversationsConversationIdClonePost(
+        conversationId: string,
+    ): CancelablePromise<Conversation> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/conversations/{conversation_id}/clone',
+            path: {
+                'conversation_id': conversationId,
+            },
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
 }

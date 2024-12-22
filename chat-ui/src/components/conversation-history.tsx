@@ -1,11 +1,20 @@
 import type { Conversation } from "@/api/models/Conversation";
 import { CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { SmallInput } from "@/components/ui/small-inputs";
 import { cn } from "@/lib/utils";
 import { ChevronLeft, ChevronRight, Plus, Trash2 } from "lucide-react";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { Button } from "./ui/button";
+
+type SortOption = "new-to-old" | "old-to-new" | "a-to-z" | "z-to-a";
 
 interface ConversationHistoryProps {
   conversations: Conversation[];
@@ -31,10 +40,38 @@ export function ConversationHistory({
   onCollapsedChange,
 }: ConversationHistoryProps) {
   const [searchQuery, setSearchQuery] = useState("");
+  const [sortOption, setSortOption] = useState<SortOption>("new-to-old");
 
-  const filteredConversations = conversations.filter((conv) =>
-    (conv.name || "").toLowerCase().includes(searchQuery.toLowerCase())
-  );
+  const filteredAndSortedConversations = useMemo(() => {
+    const result = conversations.filter((conv) =>
+      (conv.name || "").toLowerCase().includes(searchQuery.toLowerCase())
+    );
+
+    switch (sortOption) {
+      case "new-to-old":
+        return [...result].sort((a, b) => {
+          const aTime = a.messages?.[a.messages.length - 1]?.timestamp || "";
+          const bTime = b.messages?.[b.messages.length - 1]?.timestamp || "";
+          return bTime.localeCompare(aTime);
+        });
+      case "old-to-new":
+        return [...result].sort((a, b) => {
+          const aTime = a.messages?.[a.messages.length - 1]?.timestamp || "";
+          const bTime = b.messages?.[b.messages.length - 1]?.timestamp || "";
+          return aTime.localeCompare(bTime);
+        });
+      case "a-to-z":
+        return [...result].sort((a, b) =>
+          (a.name || "").localeCompare(b.name || "")
+        );
+      case "z-to-a":
+        return [...result].sort((a, b) =>
+          (b.name || "").localeCompare(a.name || "")
+        );
+      default:
+        return result;
+    }
+  }, [conversations, searchQuery, sortOption]);
 
   const handleSelect = (conv: Conversation) => {
     if (conv.id) {
@@ -53,7 +90,7 @@ export function ConversationHistory({
     <div
       className={cn(
         "bg-card transition-all duration-300 ease-in-out overflow-hidden rounded-l-xl",
-        isCollapsed ? "w-[32px]" : "w-[400px]",
+        isCollapsed ? "w-[32px]" : "w-[300px]",
         className
       )}
     >
@@ -61,16 +98,16 @@ export function ConversationHistory({
         <div
           className={cn(
             "transition-all duration-300 ease-in-out",
-            isCollapsed ? "w-[32px]" : "w-[400px]"
+            isCollapsed ? "w-[32px]" : "w-[300px]"
           )}
         >
           <div className="h-full flex">
-            <div className="flex-none py-4 px-1">
+            <div className="flex-none py-2 px-1">
               <Button
                 variant="ghost"
                 size="icon"
                 onClick={() => onCollapsedChange?.(!isCollapsed)}
-                className="h-6 w-6"
+                className="h-5 w-5"
               >
                 {isCollapsed ? (
                   <ChevronRight className="h-3 w-3" />
@@ -82,34 +119,61 @@ export function ConversationHistory({
 
             {!isCollapsed && (
               <div className="flex-1 min-w-0">
-                <CardHeader className="pb-2 px-2">
-                  <div className="flex items-center justify-between">
-                    <CardTitle className="text-lg">History</CardTitle>
+                <CardHeader className="pb-2 px-2 space-y-1">
+                  <div className="flex items-center justify-between -mt-[20px]">
+                    <CardTitle className="text-xs font-medium">
+                      Chat History
+                    </CardTitle>
                     <Button
                       variant="ghost"
                       size="icon"
                       onClick={onNew}
-                      className="h-8 w-8"
                       disabled={disableNew}
                     >
-                      <Plus className="h-4 w-4" />
+                      <Plus className="h-2.5 w-2.5 scale-75 transform" />
                     </Button>
                   </div>
-                  <Input
-                    placeholder="Search conversations..."
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                    className="mt-2 w-full"
-                  />
+                  <div className="flex gap-1 pt-2">
+                    <SmallInput
+                      placeholder="Search..."
+                      value={searchQuery}
+                      onChange={(e) => setSearchQuery(e.target.value)}
+                      className="h-5"
+                    />
+                    <Select
+                      value={sortOption}
+                      onValueChange={(value) =>
+                        setSortOption(value as SortOption)
+                      }
+                    >
+                      <SelectTrigger className="h-5 text-2xs flex-shrink-0 w-20">
+                        <SelectValue placeholder="Sort" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="new-to-old" className="text-2xs">
+                          Newest
+                        </SelectItem>
+                        <SelectItem value="old-to-new" className="text-2xs">
+                          Oldest
+                        </SelectItem>
+                        <SelectItem value="a-to-z" className="text-2xs">
+                          A to Z
+                        </SelectItem>
+                        <SelectItem value="z-to-a" className="text-2xs">
+                          Z to A
+                        </SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
                 </CardHeader>
                 <CardContent className="p-0">
-                  <ScrollArea className="h-[calc(100vh-12rem)]">
-                    <div className="px-2 space-y-1">
-                      {filteredConversations.map((conv) => (
+                  <ScrollArea className="h-[calc(100vh-9.5rem)]">
+                    <div className="px-2 space-y-0.5">
+                      {filteredAndSortedConversations.map((conv) => (
                         <div
                           key={conv.id}
                           className={cn(
-                            "flex items-center gap-2 rounded-md hover:bg-accent py-1 pr-2 pl-1",
+                            "flex items-center gap-1 rounded-sm hover:bg-accent py-0.5 pr-1 pl-1",
                             selectedId === conv.id ? "bg-accent" : ""
                           )}
                         >
@@ -117,10 +181,10 @@ export function ConversationHistory({
                             className="min-w-0 flex-1 cursor-pointer"
                             onClick={() => handleSelect(conv)}
                           >
-                            <div className="font-medium truncate">
+                            <div className="text-2xs truncate">
                               {conv.name || "Untitled"}
                             </div>
-                            <div className="text-xs text-muted-foreground">
+                            <div className="text-3xs text-muted-foreground">
                               {(conv.messages?.length || 0) +
                                 (conv.system_prompt_id ? 1 : 0)}{" "}
                               messages
@@ -128,11 +192,11 @@ export function ConversationHistory({
                           </div>
                           <Button
                             variant="ghost"
-                            size="sm"
+                            size="icon"
                             onClick={(e) => handleDelete(e, conv)}
-                            className="h-2 w-2 p-0 mr-1"
+                            className="h-3.5 w-3.5"
                           >
-                            <Trash2 className="h-2 w-2" />
+                            <Trash2 className="text-muted-foreground scale-75 transform" />
                           </Button>
                         </div>
                       ))}

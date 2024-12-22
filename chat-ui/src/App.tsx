@@ -36,16 +36,21 @@ function App() {
 
   return (
     <div className="h-screen flex flex-col bg-background">
-      <div className="flex-none flex justify-between items-center p-4">
-        <h1 className="text-xl font-semibold">Claude Chat</h1>
+      <div className="flex-none flex justify-between items-center p-2">
+        <h1 className="text-l font-semibold">Claude Chat</h1>
         <div className="flex items-center gap-2">
-          <Button variant="outline" size="icon" onClick={addPanel}>
-            <Plus className="h-4 w-4" />
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={addPanel}
+            className="h-5 w-5"
+          >
+            <Plus className="text-muted-foreground scale-75 transform" />
           </Button>
           <ThemeToggle />
         </div>
       </div>
-      <div className="flex-1 flex gap-4 p-4 min-h-0">
+      <div className="flex-1 flex gap-4 p-2 min-h-0">
         {panels.map((id) => (
           <div key={id} className="flex-1 min-w-0 min-h-0 relative">
             {panels.length > 1 && (

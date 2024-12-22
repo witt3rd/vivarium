@@ -2,8 +2,7 @@ import { Message } from "@/api/models/Message";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
+import { SmallInput, SmallTextarea } from "@/components/ui/small-inputs";
 import { Copy, Edit2, Trash2 } from "lucide-react";
 import { useState } from "react";
 import { MessageContent as MessageContentComponent } from "./message-content";
@@ -79,7 +78,7 @@ export function MessageComponent({
     <Card className={`mb-4 ${isSystemPrompt ? "border-blue-500" : ""}`}>
       <CardHeader className="flex flex-row items-center justify-between py-0.5 px-1">
         <div className="flex items-center gap-2">
-          <span className="text-[8px] font-medium capitalize text-muted-foreground/70">
+          <span className="text-3xs font-medium capitalize text-muted-foreground/70">
             {message.role}
           </span>
         </div>
@@ -97,7 +96,7 @@ export function MessageComponent({
             />
             <label
               htmlFor={`cache-${message.id}`}
-              className="text-[18px] font-medium text-muted-foreground/70 cursor-pointer select-none"
+              className="text-2xs font-medium text-muted-foreground/70 cursor-pointer select-none"
             >
               Cache
             </label>
@@ -136,7 +135,7 @@ export function MessageComponent({
           <div className="space-y-4">
             {isSystemPrompt ? (
               <>
-                <Input
+                <SmallInput
                   placeholder="System Prompt Name"
                   value={(editedContent[0] as MessageContent).text}
                   onChange={(e) =>
@@ -146,7 +145,7 @@ export function MessageComponent({
                     ])
                   }
                 />
-                <Textarea
+                <SmallTextarea
                   placeholder="System Prompt Content"
                   value={(editedContent[1] as MessageContent).text}
                   onChange={(e) =>
@@ -159,7 +158,7 @@ export function MessageComponent({
                 />
               </>
             ) : (
-              <Textarea
+              <SmallTextarea
                 value={editedContent
                   .map((c) => (c as MessageContent).text)
                   .join("\n")}
@@ -178,7 +177,7 @@ export function MessageComponent({
           </div>
         ) : isSystemPrompt ? (
           <div className="space-y-2">
-            <h3 className="font-medium">
+            <h3 className="font-medium text-2xs">
               {(message.content[0] as MessageContent).text}
             </h3>
             <div className="overflow-hidden">
@@ -195,7 +194,7 @@ export function MessageComponent({
               />
             </div>
             {message.role === "assistant" && message.usage && (
-              <div className="text-[8px] text-muted-foreground/70 mt-2 flex gap-4">
+              <div className="text-3xs text-muted-foreground/70 mt-2 flex gap-4">
                 <span>Input: {message.usage.input_tokens}</span>
                 <span>
                   Cache Created:{" "}
