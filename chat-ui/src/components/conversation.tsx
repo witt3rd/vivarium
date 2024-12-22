@@ -63,6 +63,7 @@ export function Conversation({
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const titleInputRef = useRef<HTMLInputElement>(null);
   const messageInputRef = useRef<HTMLTextAreaElement>(null);
+  const shouldAutoScroll = useRef<boolean>(false);
 
   // Optimized state updates with proper types
   const updateConversations = useCallback(
@@ -77,6 +78,7 @@ export function Conversation({
     if (!currentId || !message.trim()) return;
 
     try {
+      shouldAutoScroll.current = true; // Set flag before sending
       setLoading(true);
       setError(null);
 
@@ -218,6 +220,7 @@ export function Conversation({
                     typeof event.delta.text === "string"
                   ) {
                     responseText += event.delta.text;
+                    shouldAutoScroll.current = true; // Re-enable auto-scroll for each chunk
 
                     setMessages((prev) => {
                       const newMessages = [...prev];
@@ -325,9 +328,12 @@ export function Conversation({
     localStorage.setItem("historyCollapsed", isHistoryCollapsed.toString());
   }, [isHistoryCollapsed]);
 
-  // Scroll to bottom when messages change
+  // Scroll to bottom when messages change, but only when shouldAutoScroll is true
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    if (shouldAutoScroll.current) {
+      messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+      shouldAutoScroll.current = false;
+    }
   }, [messages]);
 
   // Load system prompts
@@ -343,6 +349,7 @@ export function Conversation({
   useEffect(() => {
     if (!currentId) return;
 
+    shouldAutoScroll.current = true; // Set flag before loading messages
     ConversationsService.getConversationConversationsConversationIdGet(
       currentId
     )
@@ -725,11 +732,18 @@ export function Conversation({
                     }
                   }}
                 >
-                  <CardTitle>
-                    {currentId
-                      ? currentConversation?.name || "Untitled"
-                      : "No Conversation Selected"}
-                  </CardTitle>
+                  <div className="flex flex-col">
+                    <CardTitle>
+                      {currentId
+                        ? currentConversation?.name || "Untitled"
+                        : "No Conversation Selected"}
+                    </CardTitle>
+                    {currentId && (
+                      <div className="text-3xs pt-0.5 text-muted-foreground">
+                        {currentId}
+                      </div>
+                    )}
+                  </div>
                   {currentId && (
                     <Edit2
                       className="h-3.5 w-3.5 opacity-0 group-hover:opacity-100 transition-opacity"
