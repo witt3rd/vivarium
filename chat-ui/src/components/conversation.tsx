@@ -19,6 +19,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { SmallTextarea } from "@/components/ui/small-inputs";
+import { sortConversations } from "@/lib/conversation-sort";
 import debounce from "lodash/debounce";
 import { Edit2 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -35,6 +36,14 @@ export function Conversation({
   const [currentId, setCurrentId] = useState<string | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
   const [systemPrompts, setSystemPrompts] = useState<SystemPrompt[]>([]);
+
+  // Initialize with newest conversation if available
+  useEffect(() => {
+    if (!currentId && conversations.length > 0) {
+      const [newestConversation] = sortConversations(conversations);
+      setCurrentId(newestConversation.id);
+    }
+  }, [conversations]);
 
   // UI state
   const [isEditingTitle, setIsEditingTitle] = useState(false);
@@ -707,8 +716,16 @@ export function Conversation({
               );
               updateConversations((prev) => prev.filter((c) => c.id !== id));
               if (currentId === id) {
-                const nextId = conversations.find((c) => c.id !== id)?.id;
-                setCurrentId(nextId || null);
+                // Get sorted conversations before deletion
+                const sortedConversations = sortConversations(conversations);
+                const currentIndex = sortedConversations.findIndex(
+                  (c) => c.id === id
+                );
+                // Get next conversation in sort order, or previous if at end
+                const nextConversation =
+                  sortedConversations[currentIndex + 1] ||
+                  sortedConversations[currentIndex - 1];
+                setCurrentId(nextConversation?.id || null);
                 setMessages([]);
               }
             } catch (err) {

@@ -9,12 +9,11 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { SmallInput } from "@/components/ui/small-inputs";
+import { sortConversations, SortOption } from "@/lib/conversation-sort";
 import { cn } from "@/lib/utils";
 import { ChevronLeft, ChevronRight, Plus, Trash2 } from "lucide-react";
 import { useMemo, useState } from "react";
 import { Button } from "./ui/button";
-
-type SortOption = "new-to-old" | "old-to-new" | "a-to-z" | "z-to-a";
 
 interface ConversationHistoryProps {
   conversations: Conversation[];
@@ -43,34 +42,10 @@ export function ConversationHistory({
   const [sortOption, setSortOption] = useState<SortOption>("new-to-old");
 
   const filteredAndSortedConversations = useMemo(() => {
-    const result = conversations.filter((conv) =>
+    const filtered = conversations.filter((conv) =>
       (conv.name || "").toLowerCase().includes(searchQuery.toLowerCase())
     );
-
-    switch (sortOption) {
-      case "new-to-old":
-        return [...result].sort((a, b) => {
-          const aTime = new Date(a.updated_at || 0).getTime();
-          const bTime = new Date(b.updated_at || 0).getTime();
-          return bTime - aTime;
-        });
-      case "old-to-new":
-        return [...result].sort((a, b) => {
-          const aTime = new Date(a.updated_at || 0).getTime();
-          const bTime = new Date(b.updated_at || 0).getTime();
-          return aTime - bTime;
-        });
-      case "a-to-z":
-        return [...result].sort((a, b) =>
-          (a.name || "").localeCompare(b.name || "")
-        );
-      case "z-to-a":
-        return [...result].sort((a, b) =>
-          (b.name || "").localeCompare(a.name || "")
-        );
-      default:
-        return result;
-    }
+    return sortConversations(filtered, sortOption);
   }, [conversations, searchQuery, sortOption]);
 
   const handleSelect = (conv: Conversation) => {
