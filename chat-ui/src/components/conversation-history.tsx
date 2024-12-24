@@ -1,4 +1,4 @@
-import type { Conversation } from "@/api/models/Conversation";
+import type { ConversationMetadata } from "@/api/models/ConversationMetadata";
 import { CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import {
@@ -16,7 +16,7 @@ import { useMemo, useState } from "react";
 import { Button } from "./ui/button";
 
 interface ConversationHistoryProps {
-  conversations: Conversation[];
+  conversations: ConversationMetadata[];
   selectedId: string | null;
   onSelect: (id: string) => void;
   onDelete: (id: string) => void;
@@ -48,13 +48,13 @@ export function ConversationHistory({
     return sortConversations(filtered, sortOption);
   }, [conversations, searchQuery, sortOption]);
 
-  const handleSelect = (conv: Conversation) => {
+  const handleSelect = (conv: ConversationMetadata) => {
     if (conv.id) {
       onSelect(conv.id);
     }
   };
 
-  const handleDelete = (e: React.MouseEvent, conv: Conversation) => {
+  const handleDelete = (e: React.MouseEvent, conv: ConversationMetadata) => {
     e.stopPropagation();
     if (conv.id) {
       onDelete(conv.id);
@@ -153,9 +153,7 @@ export function ConversationHistory({
                         {conv.name || "Untitled"}
                       </div>
                       <div className="text-3xs text-muted-foreground">
-                        {(conv.messages?.length || 0) +
-                          (conv.system_prompt_id ? 1 : 0)}{" "}
-                        messages
+                        {conv.message_count} messages
                       </div>
                     </div>
                     <Button

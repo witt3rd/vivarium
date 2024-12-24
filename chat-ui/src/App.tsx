@@ -1,8 +1,7 @@
 "use client";
 
-import { Conversation as ConversationType } from "@/api/models/Conversation";
+import { ConversationMetadata } from "@/api/models/ConversationMetadata";
 import { ConversationsService } from "@/api/services/ConversationsService";
-import { Conversation } from "@/components/conversation";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { Button } from "@/components/ui/button";
 import {
@@ -20,45 +19,39 @@ import {
 } from "@dnd-kit/sortable";
 import { Plus } from "lucide-react";
 import { useEffect, useState } from "react";
+import { Conversation } from "./components/conversation";
 
-function App() {
-  const [conversations, setConversations] = useState<ConversationType[]>([]);
+export default function App() {
+  const [conversations, setConversations] = useState<ConversationMetadata[]>(
+    []
+  );
   const [panels, setPanels] = useState<string[]>(["main"]);
 
-  const sensors = useSensors(
-    useSensor(MouseSensor, {
-      activationConstraint: {
-        distance: 10,
-      },
-    }),
-    useSensor(TouchSensor, {
-      activationConstraint: {
-        delay: 250,
-        tolerance: 5,
-      },
-    })
-  );
+  const mouseSensor = useSensor(MouseSensor, {
+    activationConstraint: {
+      distance: 10,
+    },
+  });
+  const touchSensor = useSensor(TouchSensor, {
+    activationConstraint: {
+      delay: 250,
+      tolerance: 5,
+    },
+  });
+  const sensors = useSensors(mouseSensor, touchSensor);
 
-  // Load initial conversations
   useEffect(() => {
-    const init = async () => {
-      try {
-        const convs =
-          await ConversationsService.getConversationsConversationsGet();
-        setConversations(convs);
-      } catch (error) {
-        console.error("Error loading conversations:", error);
-      }
-    };
     init();
   }, []);
 
-  const addPanel = () => {
-    setPanels((prev) => [...prev, crypto.randomUUID()]);
-  };
-
-  const removePanel = (id: string) => {
-    setPanels((prev) => prev.filter((p) => p !== id));
+  const init = async () => {
+    try {
+      const conversations =
+        await ConversationsService.getMetadataListConversationsGet();
+      setConversations(conversations);
+    } catch (error) {
+      console.error("Failed to load conversations:", error);
+    }
   };
 
   const handleDragEnd = (event: DragEndEvent) => {
@@ -73,6 +66,26 @@ function App() {
     }
   };
 
+  const handleNewPanel = () => {
+    setPanels((panels) => [...panels, crypto.randomUUID()]);
+  };
+
+  const handleClosePanel = (id: string) => {
+    setPanels((panels) => panels.filter((panel) => panel !== id));
+  };
+
+  const handleConversationsChange = (metadata: ConversationMetadata[]) => {
+    setConversations(
+      metadata.map((m) => {
+        const existing = conversations.find((c) => c.id === m.id);
+        if (existing && JSON.stringify(existing) !== JSON.stringify(m)) {
+          return { ...m, updated_at: new Date().toISOString() };
+        }
+        return m;
+      })
+    );
+  };
+
   return (
     <div className="h-screen flex flex-col bg-background">
       <div className="flex-none flex justify-between items-center p-2">
@@ -81,7 +94,7 @@ function App() {
           <Button
             variant="ghost"
             size="icon"
-            onClick={addPanel}
+            onClick={handleNewPanel}
             className="h-5 w-5"
           >
             <Plus className="text-muted-foreground scale-75 transform" />
@@ -89,8 +102,8 @@ function App() {
           <ThemeToggle />
         </div>
       </div>
-      <DndContext sensors={sensors} onDragEnd={handleDragEnd}>
-        <div className="flex-1 overflow-x-auto">
+      <main className="flex-1 overflow-x-auto">
+        <DndContext sensors={sensors} onDragEnd={handleDragEnd}>
           <div
             className="flex gap-4 p-2 min-h-0 h-full"
             style={{ width: `max(100%, ${panels.length * 700}px)` }}
@@ -104,18 +117,16 @@ function App() {
                   <Conversation
                     id={id}
                     conversations={conversations}
-                    onConversationsChange={setConversations}
-                    onRemove={removePanel}
+                    onConversationsChange={handleConversationsChange}
+                    onRemove={handleClosePanel}
                     showCloseButton={panels.length > 1}
                   />
                 </div>
               ))}
             </SortableContext>
           </div>
-        </div>
-      </DndContext>
+        </DndContext>
+      </main>
     </div>
   );
 }
-
-export default App;

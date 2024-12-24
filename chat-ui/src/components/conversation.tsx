@@ -1,8 +1,8 @@
 "use client";
 
-import { Conversation as ConversationType } from "@/api/models/Conversation";
-import { ConversationCreate } from "@/api/models/ConversationCreate";
+import { ConversationMetadata } from "@/api/models/ConversationMetadata";
 import { Message } from "@/api/models/Message";
+import { MetadataCreate } from "@/api/models/MetadataCreate";
 import { SystemPrompt } from "@/api/models/SystemPrompt";
 import { ConversationsService } from "@/api/services/ConversationsService";
 import { SystemPromptsService } from "@/api/services/SystemPromptsService";
@@ -40,8 +40,8 @@ export function Conversation({
   onRemove,
   showCloseButton,
 }: {
-  conversations: ConversationType[];
-  onConversationsChange: (conversations: ConversationType[]) => void;
+  conversations: ConversationMetadata[];
+  onConversationsChange: (metadata: ConversationMetadata[]) => void;
   id: string;
   onRemove?: (id: string) => void;
   showCloseButton?: boolean;
@@ -60,9 +60,20 @@ export function Conversation({
     transition,
   };
 
+  // Core state
   const [currentId, setCurrentId] = useState<string | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
   const [systemPrompts, setSystemPrompts] = useState<SystemPrompt[]>([]);
+
+  // UI state
+  const [isEditingTitle, setIsEditingTitle] = useState(false);
+  const [editedTitle, setEditedTitle] = useState("");
+  const [isPreCached, setIsPreCached] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [isHistoryCollapsed, setIsHistoryCollapsed] = useState(false);
+
+  const currentMetadata = conversations.find((m) => m.id === currentId);
 
   // Initialize and handle conversation changes
   useEffect(() => {
@@ -77,27 +88,11 @@ export function Conversation({
     }
   }, [conversations]); // Only run when conversations changes
 
-  // UI state
-  const [isEditingTitle, setIsEditingTitle] = useState(false);
-  const [editedTitle, setEditedTitle] = useState("");
-  const [isPreCached, setIsPreCached] = useState(false);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [isHistoryCollapsed, setIsHistoryCollapsed] = useState(false);
-
   const currentConversation = conversations.find((c) => c.id === currentId);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const titleInputRef = useRef<HTMLInputElement>(null);
   const shouldAutoScroll = useRef<boolean>(false);
   const messageInputRef = useRef<MessageInputHandle>(null);
-
-  // Optimized state updates with proper types
-  const updateConversations = useCallback(
-    (updater: (prev: ConversationType[]) => ConversationType[]) => {
-      onConversationsChange(updater(conversations));
-    },
-    [conversations, onConversationsChange]
-  );
 
   // Memoized send handler
   const handleSend = useCallback(
@@ -105,46 +100,26 @@ export function Conversation({
       if (!currentId || !messageText.trim()) return;
 
       try {
-        shouldAutoScroll.current = true; // Set flag before sending
+        shouldAutoScroll.current = true;
         setLoading(true);
         setError(null);
 
-        // Clean up any empty conversations except current one
-        const emptyConvs = conversations.filter(
-          (c) => c.id !== currentId && isEmptyConversation(c)
-        );
-
-        // Delete empty conversations
-        await Promise.all(
-          emptyConvs.map(async (conv) => {
-            if (conv.id) {
-              try {
-                await ConversationsService.removeConversationConversationsConversationIdDelete(
-                  conv.id
-                );
-                updateConversations((prev) =>
-                  prev.filter((c) => c.id !== conv.id)
-                );
-              } catch (err) {
-                console.error("Error cleaning up empty conversation:", err);
-              }
-            }
-          })
-        );
+        // Create messages with IDs that will be used throughout the operation
+        const userMessageId = crypto.randomUUID();
+        const assistantMessageId = crypto.randomUUID();
 
         // Add user message to UI immediately
         const userMessage: Message = {
-          id: crypto.randomUUID(),
+          id: userMessageId,
           role: "user",
           content: [{ type: "text", text: messageText }],
           timestamp: new Date().toISOString(),
           cache: isPreCached,
         };
         setMessages((prev) => [...prev, userMessage]);
-        setIsPreCached(false); // Reset cache flag after sending
+        setIsPreCached(false);
 
-        // Create assistant message with a single ID that will be used throughout
-        const assistantMessageId = crypto.randomUUID();
+        // Create assistant message placeholder
         const assistantMessage: Message = {
           id: assistantMessageId,
           role: "assistant",
@@ -153,19 +128,11 @@ export function Conversation({
         };
         setMessages((prev) => [...prev, assistantMessage]);
 
-        // Update conversations list with both messages in a single update
-        updateConversations((prev) =>
-          prev.map((c) =>
-            c.id === currentId
-              ? {
-                  ...c,
-                  messages: [
-                    ...(c.messages || []),
-                    userMessage,
-                    assistantMessage,
-                  ],
-                }
-              : c
+        // Update metadata count for both messages atomically
+        const updatedCount = (currentMetadata?.message_count ?? 0) + 2;
+        onConversationsChange(
+          conversations.map((c) =>
+            c.id === currentId ? { ...c, message_count: updatedCount } : c
           )
         );
 
@@ -177,13 +144,27 @@ export function Conversation({
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
               ...userMessage,
-              assistant_message_id: assistantMessageId, // Pass the ID to backend
+              assistant_message_id: assistantMessageId,
             }),
           }
         );
 
-        if (!response.ok)
+        if (!response.ok) {
+          // If the server request fails, rollback the UI changes
+          setMessages((prev) =>
+            prev.filter(
+              (m) => m.id !== userMessageId && m.id !== assistantMessageId
+            )
+          );
+          onConversationsChange(
+            conversations.map((c) =>
+              c.id === currentId
+                ? { ...c, message_count: currentMetadata?.message_count ?? 0 }
+                : c
+            )
+          );
           throw new Error(`HTTP error! status: ${response.status}`);
+        }
 
         const reader = response.body?.getReader();
         if (!reader) throw new Error("No reader available");
@@ -276,13 +257,11 @@ export function Conversation({
         }
 
         // Fetch the final message to get complete usage information
-        const conversation =
-          await ConversationsService.getConversationConversationsConversationIdGet(
+        const messages =
+          await ConversationsService.getMessagesConversationsConvIdMessagesGet(
             currentId
           );
-        const finalMessage = conversation.messages?.find(
-          (m: Message) => m.id === assistantMessageId
-        );
+        const finalMessage = messages.find((m) => m.id === assistantMessageId);
         if (finalMessage) {
           setMessages((prev) => {
             const newMessages = [...prev];
@@ -296,15 +275,15 @@ export function Conversation({
             return newMessages;
           });
         }
-      } catch (err) {
-        console.error("Error sending message:", err);
-        setError("Failed to send message");
-        throw err;
+      } catch (error) {
+        console.error("Error sending message:", error);
+        setError("Failed to send message. Please try again.");
+        throw error;
       } finally {
         setLoading(false);
       }
     },
-    [currentId, isPreCached, conversations, updateConversations]
+    [currentId, isPreCached, currentMetadata?.message_count]
   );
 
   // Load collapsed state from localStorage
@@ -342,18 +321,16 @@ export function Conversation({
     if (!currentId) return;
 
     shouldAutoScroll.current = true; // Set flag before loading messages
-    ConversationsService.getConversationConversationsConversationIdGet(
-      currentId
-    )
-      .then(async (conv: ConversationType) => {
-        if (conv.system_prompt_id) {
+    ConversationsService.getMessagesConversationsConvIdMessagesGet(currentId)
+      .then(async (messages) => {
+        if (currentMetadata?.system_prompt_id) {
           const prompt =
             await SystemPromptsService.getSystemPromptSystemPromptsPromptIdGet(
-              conv.system_prompt_id
+              currentMetadata.system_prompt_id
             );
           setMessages([
             {
-              id: conv.system_prompt_id,
+              id: currentMetadata.system_prompt_id,
               role: "system",
               content: [
                 { type: "text", text: prompt.name },
@@ -362,37 +339,32 @@ export function Conversation({
               timestamp: new Date().toISOString(),
               cache: prompt.is_cached,
             },
-            ...(conv.messages?.filter((m: Message) => m.role !== "system") ||
-              []),
+            ...messages.filter((m) => m.role !== "system"),
           ]);
         } else {
-          setMessages(conv.messages || []);
+          setMessages(messages);
         }
       })
       .catch((error: unknown) => {
         console.error("Error loading messages:", error);
         setError("Failed to load messages");
       });
-  }, [currentId]);
-
-  // Helper to determine if a conversation is empty
-  const isEmptyConversation = (conv: ConversationType): boolean => {
-    return !conv.messages || conv.messages.length === 0; // Simple check - just no messages
-  };
+  }, [currentId, currentMetadata?.system_prompt_id]);
 
   const handleNewConversation = async () => {
     try {
-      const createParams: ConversationCreate = {
+      const createParams: MetadataCreate = {
         name: "New Conversation",
         id: crypto.randomUUID(),
       };
-      const conv =
-        await ConversationsService.createConversationConversationsPost(
+      const metadata =
+        await ConversationsService.createMetadataConversationsPost(
           createParams
         );
-      if (conv.id) {
-        updateConversations((prev) => [conv, ...prev]);
-        setCurrentId(conv.id);
+      if (metadata.id) {
+        onConversationsChange([metadata, ...conversations]);
+        setCurrentId(metadata.id);
+        setMessages([]);
       }
     } catch (err) {
       console.error("Error creating conversation:", err);
@@ -405,17 +377,17 @@ export function Conversation({
 
     try {
       const updated =
-        await ConversationsService.updateConversationConversationsConversationIdPut(
+        await ConversationsService.updateMetadataConversationsConvIdMetadataPut(
           currentId,
           {
             name: editedTitle.trim(),
-            system_prompt_id: currentConversation?.system_prompt_id ?? null,
-            model: currentConversation?.model ?? "claude-3-5-sonnet-20241022",
-            max_tokens: currentConversation?.max_tokens ?? 8192,
+            system_prompt_id: currentMetadata?.system_prompt_id ?? null,
+            model: currentMetadata?.model ?? "claude-3-5-sonnet-20241022",
+            max_tokens: currentMetadata?.max_tokens ?? 8192,
           }
         );
-      updateConversations((prev) =>
-        prev.map((c: ConversationType) => (c.id === currentId ? updated : c))
+      onConversationsChange(
+        conversations.map((c) => (c.id === currentId ? updated : c))
       );
       setIsEditingTitle(false);
     } catch (err) {
@@ -429,17 +401,17 @@ export function Conversation({
 
     try {
       const updated =
-        await ConversationsService.updateConversationConversationsConversationIdPut(
+        await ConversationsService.updateMetadataConversationsConvIdMetadataPut(
           currentId,
           {
-            name: currentConversation?.name ?? "New Conversation",
+            name: currentMetadata?.name ?? "New Conversation",
             system_prompt_id: promptId,
-            model: currentConversation?.model ?? "claude-3-5-sonnet-20241022",
-            max_tokens: currentConversation?.max_tokens ?? 8192,
+            model: currentMetadata?.model ?? "claude-3-5-sonnet-20241022",
+            max_tokens: currentMetadata?.max_tokens ?? 8192,
           }
         );
-      updateConversations((prev) =>
-        prev.map((c) => (c.id === currentId ? updated : c))
+      onConversationsChange(
+        conversations.map((c) => (c.id === currentId ? updated : c))
       );
 
       if (promptId) {
@@ -463,8 +435,8 @@ export function Conversation({
       } else {
         setMessages(messages.filter((m) => m.role !== "system"));
       }
-    } catch (err) {
-      console.error("Error updating system prompt:", err);
+    } catch (error) {
+      console.error("Error updating system prompt:", error);
       setError("Failed to update system prompt");
     }
   };
@@ -475,7 +447,6 @@ export function Conversation({
     // Check if this is a system prompt message
     const message = messages.find((m) => m.id === messageId);
     if (message?.role === "system") {
-      // Confirm deletion
       if (
         !window.confirm("Are you sure you want to delete this system prompt?")
       ) {
@@ -484,13 +455,13 @@ export function Conversation({
 
       try {
         const updated =
-          await ConversationsService.updateConversationConversationsConversationIdPut(
+          await ConversationsService.updateMetadataConversationsConvIdMetadataPut(
             currentId,
             {
-              name: currentConversation?.name ?? "New Conversation",
+              name: currentMetadata?.name ?? "New Conversation",
               system_prompt_id: null,
-              model: currentConversation?.model ?? "claude-3-5-sonnet-20241022",
-              max_tokens: currentConversation?.max_tokens ?? 8192,
+              model: currentMetadata?.model ?? "claude-3-5-sonnet-20241022",
+              max_tokens: currentMetadata?.max_tokens ?? 8192,
             }
           );
 
@@ -499,12 +470,12 @@ export function Conversation({
         );
 
         setSystemPrompts((prev) => prev.filter((p) => p.id !== messageId));
-        updateConversations((prev) =>
-          prev.map((c) => (c.id === currentId ? updated : c))
+        onConversationsChange(
+          conversations.map((c) => (c.id === currentId ? updated : c))
         );
         setMessages((prev) => prev.filter((m) => m.id !== messageId));
-      } catch (err) {
-        console.error("Error deleting system prompt:", err);
+      } catch (error) {
+        console.error("Error deleting system prompt:", error);
         setError("Failed to delete system prompt");
       }
       return;
@@ -512,20 +483,37 @@ export function Conversation({
 
     // Handle regular message deletion
     try {
-      await ConversationsService.deleteMessageConversationsConversationIdMessagesMessageIdDelete(
-        currentId,
-        messageId
-      );
+      // Optimistically update UI
+      const previousMessages = messages;
+      const previousCount = currentMetadata?.message_count ?? 0;
+
       setMessages((prev) => prev.filter((msg) => msg.id !== messageId));
-      updateConversations((prev) =>
-        prev.map((c) =>
+      onConversationsChange(
+        conversations.map((c) =>
           c.id === currentId
-            ? { ...c, messages: c.messages?.filter((m) => m.id !== messageId) }
+            ? { ...c, message_count: Math.max(0, (c.message_count || 0) - 1) }
             : c
         )
       );
-    } catch (err) {
-      console.error("Error deleting message:", err);
+
+      try {
+        await ConversationsService.deleteMessageConversationsConvIdMessagesMessageIdDelete(
+          currentId,
+          messageId
+        );
+      } catch (error) {
+        // Rollback UI changes on error
+        console.error("Error deleting message:", error);
+        setError("Failed to delete message");
+        setMessages(previousMessages);
+        onConversationsChange(
+          conversations.map((c) =>
+            c.id === currentId ? { ...c, message_count: previousCount } : c
+          )
+        );
+      }
+    } catch (error) {
+      console.error("Error in delete operation:", error);
       setError("Failed to delete message");
     }
   };
@@ -533,7 +521,6 @@ export function Conversation({
   const handleToggleCache = async (messageId: string) => {
     if (!currentId) return;
 
-    // Check if this is a system prompt message
     const message = messages.find((m) => m.id === messageId);
     if (message?.role === "system") {
       try {
@@ -544,8 +531,6 @@ export function Conversation({
               is_cached: !message.cache,
             }
           );
-
-        // Update messages state to reflect the change
         setMessages((prev) =>
           prev.map((msg) =>
             msg.id === messageId
@@ -553,16 +538,15 @@ export function Conversation({
               : msg
           )
         );
-      } catch (err) {
-        console.error("Error toggling system prompt cache:", err);
+      } catch (error) {
+        console.error("Error toggling system prompt cache:", error);
         setError("Failed to toggle system prompt cache");
       }
       return;
     }
 
-    // Handle regular message cache toggle
     try {
-      await ConversationsService.toggleMessageCacheConversationsConversationIdMessagesMessageIdCachePost(
+      await ConversationsService.toggleMessageCacheConversationsConvIdMessagesMessageIdCachePost(
         currentId,
         messageId
       );
@@ -571,8 +555,8 @@ export function Conversation({
           msg.id === messageId ? { ...msg, cache: !msg.cache } : msg
         )
       );
-    } catch (err) {
-      console.error("Error toggling message cache:", err);
+    } catch (error) {
+      console.error("Error toggling message cache:", error);
       setError("Failed to toggle cache");
     }
   };
@@ -582,7 +566,6 @@ export function Conversation({
 
     try {
       if (editedMessage.role === "system") {
-        // System prompt update
         const updatedPrompt =
           await SystemPromptsService.updateSystemPromptSystemPromptsPromptIdPut(
             editedMessage.id,
@@ -591,26 +574,21 @@ export function Conversation({
               content: editedMessage.content[1].text,
             }
           );
-
-        // Update systemPrompts state for the dropdown
         setSystemPrompts((prev) =>
           prev.map((p) => (p.id === editedMessage.id ? updatedPrompt : p))
         );
       } else {
-        // Regular message update
-        await ConversationsService.updateMessageConversationsConversationIdMessagesMessageIdPut(
+        await ConversationsService.updateMessageConversationsConvIdMessagesMessageIdPut(
           currentId,
           editedMessage.id,
           editedMessage
         );
       }
-
-      // Update messages state
       setMessages((prev) =>
         prev.map((msg) => (msg.id === editedMessage.id ? editedMessage : msg))
       );
-    } catch (err) {
-      console.error("Error updating message:", err);
+    } catch (error) {
+      console.error("Error updating message:", error);
       setError("Failed to update message");
     }
   };
@@ -628,8 +606,8 @@ export function Conversation({
       if (currentId) {
         handleSystemPromptChange(newPrompt.id);
       }
-    } catch (err) {
-      console.error("Error creating system prompt:", err);
+    } catch (error) {
+      console.error("Error creating system prompt:", error);
       setError("Failed to create system prompt");
     }
   };
@@ -639,25 +617,68 @@ export function Conversation({
 
     try {
       const text =
-        await ConversationsService.getConversationMarkdownConversationsConversationIdMarkdownGet(
+        await ConversationsService.getMarkdownConversationsConvIdMarkdownGet(
           currentId
         );
 
-      // Create blob and download
       const blob = new Blob([text], { type: "text/markdown" });
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
-      a.download = `${currentConversation?.name || "conversation"}.md`;
+      a.download = `${currentMetadata?.name || "conversation"}.md`;
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
       window.URL.revokeObjectURL(url);
-    } catch (error: unknown) {
+    } catch (error) {
       console.error("Error downloading transcript:", error);
       setError("Failed to download transcript");
     }
   };
+
+  const handleDelete = async (id: string) => {
+    try {
+      await ConversationsService.deleteConversationConversationsConvIdDelete(
+        id
+      );
+      onConversationsChange(conversations.filter((c) => c.id !== id));
+      if (currentId === id) {
+        const sortedMetadata = sortConversations(conversations);
+        const currentIndex = sortedMetadata.findIndex((c) => c.id === id);
+        const nextMetadata =
+          sortedMetadata[currentIndex + 1] || sortedMetadata[currentIndex - 1];
+        setCurrentId(nextMetadata?.id || null);
+        setMessages([]);
+      }
+    } catch (error) {
+      console.error("Error deleting conversation:", error);
+      setError("Failed to delete conversation");
+    }
+  };
+
+  const handleCloneConversation = async () => {
+    if (!currentId) return;
+    try {
+      const clonedConv =
+        await ConversationsService.cloneConversationConversationsConvIdClonePost(
+          currentId
+        );
+      onConversationsChange([clonedConv, ...conversations]);
+      setCurrentId(clonedConv.id);
+      setMessages([]);
+    } catch (error) {
+      console.error("Error cloning conversation:", error);
+      setError("Failed to clone conversation");
+    }
+  };
+
+  // Focus title input when editing starts
+  useEffect(() => {
+    if (isEditingTitle && titleInputRef.current) {
+      titleInputRef.current.focus();
+      titleInputRef.current.select();
+    }
+  }, [isEditingTitle]);
 
   return (
     <Card
@@ -673,30 +694,7 @@ export function Conversation({
           conversations={conversations}
           selectedId={currentId}
           onSelect={setCurrentId}
-          onDelete={async (id: string) => {
-            try {
-              await ConversationsService.removeConversationConversationsConversationIdDelete(
-                id
-              );
-              updateConversations((prev) => prev.filter((c) => c.id !== id));
-              if (currentId === id) {
-                // Get sorted conversations before deletion
-                const sortedConversations = sortConversations(conversations);
-                const currentIndex = sortedConversations.findIndex(
-                  (c) => c.id === id
-                );
-                // Get next conversation in sort order, or previous if at end
-                const nextConversation =
-                  sortedConversations[currentIndex + 1] ||
-                  sortedConversations[currentIndex - 1];
-                setCurrentId(nextConversation?.id || null);
-                setMessages([]);
-              }
-            } catch (err) {
-              console.error("Error deleting conversation:", err);
-              setError("Failed to delete conversation");
-            }
-          }}
+          onDelete={handleDelete}
           onNew={handleNewConversation}
           isCollapsed={isHistoryCollapsed}
           onCollapsedChange={setIsHistoryCollapsed}
@@ -720,11 +718,19 @@ export function Conversation({
                   placeholder="Conversation Title"
                 />
               ) : (
-                <div className="flex items-center gap-2 group cursor-pointer min-w-0">
+                <div
+                  className="flex items-center gap-2 group cursor-pointer min-w-0"
+                  onClick={() => {
+                    if (currentId) {
+                      setIsEditingTitle(true);
+                      setEditedTitle(currentMetadata?.name || "");
+                    }
+                  }}
+                >
                   <div className="flex flex-col min-w-0">
                     <CardTitle className="truncate">
                       {currentId
-                        ? currentConversation?.name || "Untitled"
+                        ? currentMetadata?.name || "Untitled"
                         : "No Conversation Selected"}
                     </CardTitle>
                     {currentId && (
@@ -737,64 +743,51 @@ export function Conversation({
                     <Edit2
                       className="h-3.5 w-3.5 opacity-0 group-hover:opacity-100 transition-opacity flex-none"
                       strokeWidth={1.5}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setIsEditingTitle(true);
+                        setEditedTitle(currentMetadata?.name || "");
+                      }}
                     />
                   )}
                 </div>
               )}
               <div className="flex-1" />
-              {currentId && messages.length > 0 && (
+              {currentId && (
                 <>
-                  <div
-                    {...attributes}
-                    {...listeners}
-                    className="h-6 w-6 cursor-grab active:cursor-grabbing hover:bg-accent rounded-sm flex items-center justify-center"
-                  >
-                    <GripVertical className="h-4 w-4 text-muted-foreground" />
-                  </div>
+                  {showCloseButton && (
+                    <div
+                      {...attributes}
+                      {...listeners}
+                      className="h-6 w-6 cursor-grab active:cursor-grabbing hover:bg-accent rounded-sm flex items-center justify-center"
+                    >
+                      <GripVertical className="h-4 w-4 text-muted-foreground" />
+                    </div>
+                  )}
                   <div className="flex-1" />
                   <div className="flex items-center">
-                    <div className="flex gap-1">
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-6 w-6"
-                        onClick={async () => {
-                          try {
-                            const response = await fetch(
-                              `/api/conversations/${currentId}/clone`,
-                              {
-                                method: "POST",
-                              }
-                            );
-                            if (!response.ok)
-                              throw new Error("Failed to clone conversation");
-                            const clonedConv: ConversationType =
-                              await response.json();
-                            updateConversations((prev) => [
-                              clonedConv,
-                              ...prev,
-                            ]);
-                            setCurrentId(clonedConv.id);
-                            setMessages(clonedConv.messages || []);
-                          } catch (err) {
-                            console.error("Error cloning conversation:", err);
-                            setError("Failed to clone conversation");
-                          }
-                        }}
-                        title="Clone conversation"
-                      >
-                        <GitBranch className="h-4 w-4 text-muted-foreground" />
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-6 w-6"
-                        onClick={handleDownloadTranscript}
-                        title="Download transcript"
-                      >
-                        <Download className="h-4 w-4 text-muted-foreground" />
-                      </Button>
-                    </div>
+                    {messages.length > 0 && (
+                      <div className="flex gap-1">
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-6 w-6"
+                          onClick={handleCloneConversation}
+                          title="Clone conversation"
+                        >
+                          <GitBranch className="h-4 w-4 text-muted-foreground" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-6 w-6"
+                          onClick={handleDownloadTranscript}
+                          title="Download transcript"
+                        >
+                          <Download className="h-4 w-4 text-muted-foreground" />
+                        </Button>
+                      </div>
+                    )}
                     {showCloseButton && (
                       <>
                         <div className="w-2" />

@@ -2,14 +2,17 @@
 /* istanbul ignore file */
 /* tslint:disable */
 /* eslint-disable */
-import type { Message } from './Message';
-export type Conversation = {
+/**
+ * Metadata about a conversation conversation.
+ */
+export type ConversationMetadata = {
     id: string;
     name: string;
     system_prompt_id?: (string | null);
     model?: string;
     max_tokens?: number;
-    messages?: Array<Message>;
+    message_count?: number;
+    tags?: Array<string>;
     created_at?: string;
     updated_at?: string;
 };

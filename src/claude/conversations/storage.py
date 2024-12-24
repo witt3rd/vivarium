@@ -1,54 +1,139 @@
 import os
-from typing import List
+import tempfile
+from datetime import datetime, timezone
+from typing import Any, Dict, List, cast
 
 import yaml
 from fastapi import HTTPException
 
 from ..storage import CONVERSATIONS_DIR
-from .schema import Conversation
+from .schema import ConversationMetadata, Message
 
 
-def save_conversation(conversation: Conversation) -> None:
-    """Save a conversation to disk."""
-    file_path = os.path.join(CONVERSATIONS_DIR, f"{conversation.id}.yaml")
-    with open(file_path, "w", encoding="utf-8") as f:
+def atomic_write_yaml(path: str, data: Dict[str, Any] | List[Any]) -> None:
+    """Write data to a file atomically using a temporary file."""
+    # Create temporary file in same directory to ensure atomic move
+    directory = os.path.dirname(path)
+    with tempfile.NamedTemporaryFile(mode="w", dir=directory, delete=False) as tf:
+        # Write data to temp file
         yaml.safe_dump(
-            conversation.model_dump(),
-            f,
+            data,
+            tf,
             default_flow_style=False,
             allow_unicode=True,
             sort_keys=False,
         )
+        tf.flush()  # Ensure all data is written
+
+        # Atomic rename temp file to target
+        try:
+            os.replace(tf.name, path)
+        except:
+            os.unlink(tf.name)  # Clean up temp file
+            raise
 
 
-def load_conversation(conversation_id: str) -> Conversation:
-    """Load a conversation from disk."""
-    file_path = os.path.join(CONVERSATIONS_DIR, f"{conversation_id}.yaml")
+def ensure_conversations_dir(conv_id: str) -> str:
+    """Ensure conversation directory exists and return its path."""
+    conversations_dir = os.path.join(CONVERSATIONS_DIR, conv_id)
+    if not os.path.exists(conversations_dir):
+        os.makedirs(conversations_dir)
+    return conversations_dir
+
+
+def save_metadata(metadata: ConversationMetadata) -> None:
+    """Save conversation metadata by updating the index."""
+    all_metadata = load_metadata_index()
+    # Update timestamp and save metadata
+    metadata.updated_at = datetime.now(timezone.utc)
+    # Update or add the metadata
+    found = False
+    for i, m in enumerate(all_metadata):
+        if m.id == metadata.id:
+            all_metadata[i] = metadata
+            found = True
+            break
+    if not found:
+        all_metadata.append(metadata)
+    save_metadata_index(all_metadata)
+
+
+def save_messages(conv_id: str, messages: List[Message]) -> None:
+    """Save conversation messages atomically."""
+    conversations_dir = ensure_conversations_dir(conv_id)
+    messages_path = os.path.join(conversations_dir, "messages.yaml")
+    atomic_write_yaml(messages_path, [msg.model_dump() for msg in messages])
+
+
+def load_metadata(conv_id: str) -> ConversationMetadata:
+    """Load conversation metadata from the index."""
+    all_metadata = load_metadata_index()
+    for metadata in all_metadata:
+        if metadata.id == conv_id:
+            return metadata
+    raise HTTPException(status_code=404, detail="Conversation metadata not found")
+
+
+def load_messages(conv_id: str) -> List[Message]:
+    """Load conversation messages."""
+    messages_path = os.path.join(CONVERSATIONS_DIR, conv_id, "messages.yaml")
     try:
-        with open(file_path, "r", encoding="utf-8") as f:
-            data = yaml.safe_load(f)
-            return Conversation(**data)
+        with open(messages_path, "r", encoding="utf-8") as f:
+            raw_data = yaml.safe_load(f)
+            messages_data = cast(
+                List[Dict[str, Any]], raw_data if isinstance(raw_data, list) else []
+            )
+            return [Message(**msg) for msg in messages_data]
     except FileNotFoundError:
-        raise HTTPException(status_code=404, detail="Conversation not found")
+        return []
+    except yaml.YAMLError:
+        raise HTTPException(status_code=500, detail="Invalid messages format")
 
 
-def list_conversations() -> List[Conversation]:
-    """List all conversations with basic metadata."""
-    conversations: List[Conversation] = []
-    for filename in os.listdir(CONVERSATIONS_DIR):
-        if filename.endswith(".yaml"):
-            with open(
-                os.path.join(CONVERSATIONS_DIR, filename), "r", encoding="utf-8"
-            ) as f:
-                data = yaml.safe_load(f)
-                conversations.append(Conversation(**data))
-    return conversations
+def list_metadata() -> List[ConversationMetadata]:
+    """List all conversation metadata from the index."""
+    return load_metadata_index()
 
 
-def delete_conversation(conversation_id: str) -> None:
-    """Delete a conversation."""
-    file_path = os.path.join(CONVERSATIONS_DIR, f"{conversation_id}.yaml")
+def rm_conversation(conv_id: str) -> None:
+    """Delete a conversation directory and its metadata."""
+    # Remove from metadata index
+    all_metadata = load_metadata_index()
+    all_metadata = [m for m in all_metadata if m.id != conv_id]
+    save_metadata_index(all_metadata)
+
+    # Delete conversation directory if it exists
+    conversations_dir = os.path.join(CONVERSATIONS_DIR, conv_id)
     try:
-        os.remove(file_path)
+        import shutil
+
+        shutil.rmtree(conversations_dir)
     except FileNotFoundError:
-        raise HTTPException(status_code=404, detail="Conversation not found")
+        pass  # Directory doesn't exist, which is fine
+
+
+def update_message_count(conv_id: str, count: int) -> None:
+    """Update message count in metadata atomically."""
+    metadata = load_metadata(conv_id)
+    metadata.message_count = count
+    save_metadata(metadata)
+
+
+def load_metadata_index() -> List[ConversationMetadata]:
+    """Load all conversation metadata from the index file."""
+    index_path = os.path.join(CONVERSATIONS_DIR, "_metadata.yaml")
+    try:
+        with open(index_path, "r", encoding="utf-8") as f:
+            raw_data = yaml.safe_load(f)
+            data = cast(
+                List[Dict[str, Any]], raw_data if isinstance(raw_data, list) else []
+            )
+            return [ConversationMetadata(**item) for item in data]
+    except FileNotFoundError:
+        return []
+
+
+def save_metadata_index(metadata_list: List[ConversationMetadata]) -> None:
+    """Save all conversation metadata to a single index file."""
+    index_path = os.path.join(CONVERSATIONS_DIR, "_metadata.yaml")
+    atomic_write_yaml(index_path, [m.model_dump() for m in metadata_list])

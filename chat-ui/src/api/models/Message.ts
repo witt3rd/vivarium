@@ -3,6 +3,9 @@
 /* tslint:disable */
 /* eslint-disable */
 import type { TokenUsage } from './TokenUsage';
+/**
+ * A message in a conversation.
+ */
 export type Message = {
     id?: (string | null);
     role: string;

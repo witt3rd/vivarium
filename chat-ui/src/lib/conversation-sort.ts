@@ -1,9 +1,9 @@
-import { Conversation } from "@/api/models/Conversation";
+import { ConversationMetadata } from "@/api/models/ConversationMetadata";
 
 export type SortOption = "new-to-old" | "old-to-new" | "a-to-z" | "z-to-a";
 
 export const sortConversations = (
-  conversations: Conversation[],
+  conversations: ConversationMetadata[],
   sortOption: SortOption = "new-to-old"
 ) => {
   const result = [...conversations];

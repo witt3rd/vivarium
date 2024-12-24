@@ -17,14 +17,16 @@ interface MessageContentProps {
 }
 
 interface CodeBlockProps {
-  children: string;
+  children: React.ReactNode;
   className?: string;
   language?: string;
 }
 
 function CodeBlock({ children, className, language }: CodeBlockProps) {
   const handleCopy = async () => {
-    await navigator.clipboard.writeText(children);
+    await navigator.clipboard.writeText(
+      typeof children === "string" ? children : ""
+    );
   };
 
   return (

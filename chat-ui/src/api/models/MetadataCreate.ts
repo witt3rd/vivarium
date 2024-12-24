@@ -3,12 +3,14 @@
 /* tslint:disable */
 /* eslint-disable */
 /**
- * Schema for updating conversation metadata.
+ * Schema for creating new conversation metadata.
  */
-export type ConversationUpdate = {
+export type MetadataCreate = {
     name: string;
+    id: string;
     system_prompt_id?: (string | null);
     model?: (string | null);
     max_tokens?: (number | null);
+    tags?: Array<string>;
 };
 

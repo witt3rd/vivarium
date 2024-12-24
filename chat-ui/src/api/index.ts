@@ -7,11 +7,11 @@ export { CancelablePromise, CancelError } from './core/CancelablePromise';
 export { OpenAPI } from './core/OpenAPI';
 export type { OpenAPIConfig } from './core/OpenAPI';
 
-export type { Conversation } from './models/Conversation';
-export type { ConversationCreate } from './models/ConversationCreate';
-export type { ConversationUpdate } from './models/ConversationUpdate';
+export type { ConversationMetadata } from './models/ConversationMetadata';
 export type { HTTPValidationError } from './models/HTTPValidationError';
 export type { Message } from './models/Message';
+export type { MetadataCreate } from './models/MetadataCreate';
+export type { MetadataUpdate } from './models/MetadataUpdate';
 export type { SystemPrompt } from './models/SystemPrompt';
 export type { SystemPromptCreate } from './models/SystemPromptCreate';
 export type { SystemPromptUpdate } from './models/SystemPromptUpdate';
