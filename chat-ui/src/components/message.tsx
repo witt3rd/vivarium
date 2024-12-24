@@ -130,7 +130,7 @@ export function MessageComponent({
           </Button>
         </div>
       </CardHeader>
-      <CardContent>
+      <CardContent className="p-2">
         {isEditing ? (
           <div className="space-y-4">
             {isSystemPrompt ? (

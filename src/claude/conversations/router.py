@@ -336,14 +336,14 @@ async def get_conversation_markdown(conversation_id: str) -> str:
     """Get a conversation in markdown format."""
     conversation = load_conversation(conversation_id)
 
-    lines = [
-        f"# {conversation.name}",
-        "",
-        f"Created: {conversation.created_at}",
-        f"Updated: {conversation.updated_at}",
-        "",
-        "---",
-        "",
+    lines: list[str] = [
+        # f"# {conversation.name}",
+        # "",
+        # f"Created: {conversation.created_at}",
+        # f"Updated: {conversation.updated_at}",
+        # "",
+        # "---",
+        # "",
     ]
 
     for message in conversation.messages or []:
@@ -357,7 +357,7 @@ async def get_conversation_markdown(conversation_id: str) -> str:
             if block["type"] == "text"
         )
 
-        lines.extend([f"**{role}**: {content}", "", "---", ""])
+        lines.extend([f"**{role}**: {content}", ""])
 
     return "\n".join(lines)
 

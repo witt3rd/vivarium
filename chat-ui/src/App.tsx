@@ -5,12 +5,39 @@ import { ConversationsService } from "@/api/services/ConversationsService";
 import { Conversation } from "@/components/conversation";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { Button } from "@/components/ui/button";
-import { Plus, X } from "lucide-react";
+import {
+  DndContext,
+  DragEndEvent,
+  MouseSensor,
+  TouchSensor,
+  useSensor,
+  useSensors,
+} from "@dnd-kit/core";
+import {
+  SortableContext,
+  arrayMove,
+  horizontalListSortingStrategy,
+} from "@dnd-kit/sortable";
+import { Plus } from "lucide-react";
 import { useEffect, useState } from "react";
 
 function App() {
   const [conversations, setConversations] = useState<ConversationType[]>([]);
   const [panels, setPanels] = useState<string[]>(["main"]);
+
+  const sensors = useSensors(
+    useSensor(MouseSensor, {
+      activationConstraint: {
+        distance: 10,
+      },
+    }),
+    useSensor(TouchSensor, {
+      activationConstraint: {
+        delay: 250,
+        tolerance: 5,
+      },
+    })
+  );
 
   // Load initial conversations
   useEffect(() => {
@@ -34,6 +61,18 @@ function App() {
     setPanels((prev) => prev.filter((p) => p !== id));
   };
 
+  const handleDragEnd = (event: DragEndEvent) => {
+    const { active, over } = event;
+
+    if (over && active.id !== over.id) {
+      setPanels((items) => {
+        const oldIndex = items.indexOf(active.id as string);
+        const newIndex = items.indexOf(over.id as string);
+        return arrayMove(items, oldIndex, newIndex);
+      });
+    }
+  };
+
   return (
     <div className="h-screen flex flex-col bg-background">
       <div className="flex-none flex justify-between items-center p-2">
@@ -50,28 +89,31 @@ function App() {
           <ThemeToggle />
         </div>
       </div>
-      <div className="flex-1 flex gap-4 p-2 min-h-0">
-        {panels.map((id) => (
-          <div key={id} className="flex-1 min-w-0 min-h-0 relative">
-            {panels.length > 1 && (
-              <Button
-                variant="ghost"
-                size="icon"
-                className="absolute top-1 right-1 z-10 h-6 w-6"
-                onClick={() => removePanel(id)}
-              >
-                <X className="h-4 w-4" />
-              </Button>
-            )}
-            <div className="h-full">
-              <Conversation
-                conversations={conversations}
-                onConversationsChange={setConversations}
-              />
-            </div>
+      <DndContext sensors={sensors} onDragEnd={handleDragEnd}>
+        <div className="flex-1 overflow-x-auto">
+          <div
+            className="flex gap-4 p-2 min-h-0 h-full"
+            style={{ width: `max(100%, ${panels.length * 700}px)` }}
+          >
+            <SortableContext
+              items={panels}
+              strategy={horizontalListSortingStrategy}
+            >
+              {panels.map((id) => (
+                <div key={id} className="flex-1 min-w-[700px]">
+                  <Conversation
+                    id={id}
+                    conversations={conversations}
+                    onConversationsChange={setConversations}
+                    onRemove={removePanel}
+                    showCloseButton={panels.length > 1}
+                  />
+                </div>
+              ))}
+            </SortableContext>
           </div>
-        ))}
-      </div>
+        </div>
+      </DndContext>
     </div>
   );
 }

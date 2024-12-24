@@ -1,6 +1,9 @@
+import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { useRemark } from "@/hooks/use-remark";
+import { cn } from "@/lib/utils";
 import debounce from "lodash/debounce";
+import { Copy } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 interface MessageContent {
@@ -13,8 +16,41 @@ interface MessageContentProps {
   content: MessageContent[];
 }
 
+interface CodeBlockProps {
+  children: string;
+  className?: string;
+  language?: string;
+}
+
+function CodeBlock({ children, className, language }: CodeBlockProps) {
+  const handleCopy = async () => {
+    await navigator.clipboard.writeText(children);
+  };
+
+  return (
+    <div className="relative group">
+      <Button
+        variant="ghost"
+        size="icon"
+        className="absolute right-2 top-2 h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity"
+        onClick={handleCopy}
+      >
+        <Copy className="h-3 w-3" />
+      </Button>
+      <pre className={cn("mt-2", className)}>
+        <code className={language}>{children}</code>
+      </pre>
+    </div>
+  );
+}
+
 export function MessageContent({ content }: MessageContentProps) {
   const [reactContent, setMarkdownSource] = useRemark({
+    rehypeReactOptions: {
+      components: {
+        code: CodeBlock,
+      },
+    },
     onError: (err) => console.error("Error parsing markdown:", err),
   });
   const contentRef = useRef<HTMLDivElement>(null);
@@ -61,7 +97,10 @@ export function MessageContent({ content }: MessageContentProps) {
   // Memoize the rendered content
   const renderedContent = useMemo(() => {
     return (
-      <div ref={contentRef} className="prose prose-xs dark:prose-invert">
+      <div
+        ref={contentRef}
+        className="prose prose-xs dark:prose-invert w-full max-w-none"
+      >
         {reactContent}
       </div>
     );

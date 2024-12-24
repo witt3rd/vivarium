@@ -8,7 +8,6 @@ import { ConversationsService } from "@/api/services/ConversationsService";
 import { SystemPromptsService } from "@/api/services/SystemPromptsService";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import {
@@ -18,21 +17,49 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { SmallTextarea } from "@/components/ui/small-inputs";
 import { sortConversations } from "@/lib/conversation-sort";
-import debounce from "lodash/debounce";
-import { Edit2 } from "lucide-react";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useSortable } from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
+import {
+  Download,
+  Edit2,
+  GitBranch,
+  GripVertical,
+  Plus,
+  X,
+} from "lucide-react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { ConversationHistory } from "./conversation-history";
 import { MessageComponent } from "./message";
+import { MessageInput, MessageInputHandle } from "./message-input";
 
 export function Conversation({
   conversations,
   onConversationsChange,
+  id,
+  onRemove,
+  showCloseButton,
 }: {
   conversations: ConversationType[];
   onConversationsChange: (conversations: ConversationType[]) => void;
+  id: string;
+  onRemove?: (id: string) => void;
+  showCloseButton?: boolean;
 }) {
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({ id });
+
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+  };
+
   const [currentId, setCurrentId] = useState<string | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
   const [systemPrompts, setSystemPrompts] = useState<SystemPrompt[]>([]);
@@ -53,7 +80,6 @@ export function Conversation({
   // UI state
   const [isEditingTitle, setIsEditingTitle] = useState(false);
   const [editedTitle, setEditedTitle] = useState("");
-  const [message, setMessage] = useState("");
   const [isPreCached, setIsPreCached] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -62,8 +88,8 @@ export function Conversation({
   const currentConversation = conversations.find((c) => c.id === currentId);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const titleInputRef = useRef<HTMLInputElement>(null);
-  const messageInputRef = useRef<HTMLTextAreaElement>(null);
   const shouldAutoScroll = useRef<boolean>(false);
+  const messageInputRef = useRef<MessageInputHandle>(null);
 
   // Optimized state updates with proper types
   const updateConversations = useCallback(
@@ -74,246 +100,212 @@ export function Conversation({
   );
 
   // Memoized send handler
-  const handleSend = useCallback(async () => {
-    if (!currentId || !message.trim()) return;
-
-    try {
-      shouldAutoScroll.current = true; // Set flag before sending
-      setLoading(true);
-      setError(null);
-
-      // Clean up any empty conversations except current one
-      const emptyConvs = conversations.filter(
-        (c) => c.id !== currentId && isEmptyConversation(c)
-      );
-
-      // Delete empty conversations
-      await Promise.all(
-        emptyConvs.map(async (conv) => {
-          if (conv.id) {
-            try {
-              await ConversationsService.removeConversationConversationsConversationIdDelete(
-                conv.id
-              );
-              updateConversations((prev) =>
-                prev.filter((c) => c.id !== conv.id)
-              );
-            } catch (err) {
-              console.error("Error cleaning up empty conversation:", err);
-            }
-          }
-        })
-      );
-
-      // Add user message to UI immediately
-      const userMessage: Message = {
-        id: crypto.randomUUID(),
-        role: "user",
-        content: [{ type: "text", text: message }],
-        timestamp: new Date().toISOString(),
-        cache: isPreCached,
-      };
-      setMessages((prev) => [...prev, userMessage]);
-      setMessage("");
-      if (messageInputRef.current) {
-        messageInputRef.current.value = "";
-      }
-      setIsPreCached(false); // Reset cache flag after sending
-
-      // Create assistant message with a single ID that will be used throughout
-      const assistantMessageId = crypto.randomUUID();
-      const assistantMessage: Message = {
-        id: assistantMessageId,
-        role: "assistant",
-        content: [{ type: "text", text: "", format: "markdown" }],
-        timestamp: new Date().toISOString(),
-      };
-      setMessages((prev) => [...prev, assistantMessage]);
-
-      // Update conversations list with both messages in a single update
-      updateConversations((prev) =>
-        prev.map((c) =>
-          c.id === currentId
-            ? {
-                ...c,
-                messages: [
-                  ...(c.messages || []),
-                  userMessage,
-                  assistantMessage,
-                ],
-              }
-            : c
-        )
-      );
-
-      // Stream response
-      const response = await fetch(`/api/conversations/${currentId}/messages`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          ...userMessage,
-          assistant_message_id: assistantMessageId, // Pass the ID to backend
-        }),
-      });
-
-      if (!response.ok)
-        throw new Error(`HTTP error! status: ${response.status}`);
-
-      const reader = response.body?.getReader();
-      if (!reader) throw new Error("No reader available");
-
-      const decoder = new TextDecoder();
-      let responseText = "";
+  const handleSend = useCallback(
+    async (messageText: string) => {
+      if (!currentId || !messageText.trim()) return;
 
       try {
-        while (true) {
-          const { done, value } = await reader.read();
-          if (done) break;
+        shouldAutoScroll.current = true; // Set flag before sending
+        setLoading(true);
+        setError(null);
 
-          const chunk = decoder.decode(value);
-          const lines = chunk.split("\n");
+        // Clean up any empty conversations except current one
+        const emptyConvs = conversations.filter(
+          (c) => c.id !== currentId && isEmptyConversation(c)
+        );
 
-          for (const line of lines) {
-            if (!line.startsWith("data: ")) continue;
-
-            const data = line.slice(6);
-            if (data === "[DONE]") break;
-
-            try {
-              if (!data.trim().startsWith("{")) continue;
-
-              const event = JSON.parse(data);
-
-              switch (event.type) {
-                case "message_start":
-                  if (event.message.role === "user") {
-                    setMessages((prev) => {
-                      const newMessages = [...prev];
-                      const userMessageIndex = newMessages.findIndex(
-                        (msg) =>
-                          msg.role === "user" && msg.id === userMessage.id
-                      );
-                      if (userMessageIndex !== -1) {
-                        newMessages[userMessageIndex] = {
-                          ...newMessages[userMessageIndex],
-                          id: event.message.id,
-                        };
-                      }
-                      return newMessages;
-                    });
-                  } else {
-                    setMessages((prev) => {
-                      const newMessages = [...prev];
-                      const lastMessage = newMessages[newMessages.length - 1];
-                      if (lastMessage?.role === "assistant") {
-                        lastMessage.id = event.message.id;
-                        lastMessage.usage = event.message.usage;
-                      }
-                      return newMessages;
-                    });
-                  }
-                  break;
-
-                case "content_block_delta":
-                  if (
-                    event.delta?.type === "text_delta" &&
-                    typeof event.delta.text === "string"
-                  ) {
-                    responseText += event.delta.text;
-                    shouldAutoScroll.current = true; // Re-enable auto-scroll for each chunk
-
-                    setMessages((prev) => {
-                      const newMessages = [...prev];
-                      const lastMessage = newMessages[newMessages.length - 1];
-                      if (lastMessage?.role === "assistant") {
-                        lastMessage.content = [
-                          {
-                            type: "text",
-                            text: responseText,
-                            format: "markdown",
-                          },
-                        ];
-                      }
-                      return newMessages;
-                    });
-                  }
-                  break;
+        // Delete empty conversations
+        await Promise.all(
+          emptyConvs.map(async (conv) => {
+            if (conv.id) {
+              try {
+                await ConversationsService.removeConversationConversationsConversationIdDelete(
+                  conv.id
+                );
+                updateConversations((prev) =>
+                  prev.filter((c) => c.id !== conv.id)
+                );
+              } catch (err) {
+                console.error("Error cleaning up empty conversation:", err);
               }
-            } catch (err) {
-              console.error("Error processing event:", err);
-              continue;
+            }
+          })
+        );
+
+        // Add user message to UI immediately
+        const userMessage: Message = {
+          id: crypto.randomUUID(),
+          role: "user",
+          content: [{ type: "text", text: messageText }],
+          timestamp: new Date().toISOString(),
+          cache: isPreCached,
+        };
+        setMessages((prev) => [...prev, userMessage]);
+        setIsPreCached(false); // Reset cache flag after sending
+
+        // Create assistant message with a single ID that will be used throughout
+        const assistantMessageId = crypto.randomUUID();
+        const assistantMessage: Message = {
+          id: assistantMessageId,
+          role: "assistant",
+          content: [{ type: "text", text: "", format: "markdown" }],
+          timestamp: new Date().toISOString(),
+        };
+        setMessages((prev) => [...prev, assistantMessage]);
+
+        // Update conversations list with both messages in a single update
+        updateConversations((prev) =>
+          prev.map((c) =>
+            c.id === currentId
+              ? {
+                  ...c,
+                  messages: [
+                    ...(c.messages || []),
+                    userMessage,
+                    assistantMessage,
+                  ],
+                }
+              : c
+          )
+        );
+
+        // Stream response
+        const response = await fetch(
+          `/api/conversations/${currentId}/messages`,
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              ...userMessage,
+              assistant_message_id: assistantMessageId, // Pass the ID to backend
+            }),
+          }
+        );
+
+        if (!response.ok)
+          throw new Error(`HTTP error! status: ${response.status}`);
+
+        const reader = response.body?.getReader();
+        if (!reader) throw new Error("No reader available");
+
+        const decoder = new TextDecoder();
+        let responseText = "";
+
+        try {
+          while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+
+            const chunk = decoder.decode(value);
+            const lines = chunk.split("\n");
+
+            for (const line of lines) {
+              if (!line.startsWith("data: ")) continue;
+
+              const data = line.slice(6);
+              if (data === "[DONE]") break;
+
+              try {
+                if (!data.trim().startsWith("{")) continue;
+
+                const event = JSON.parse(data);
+
+                switch (event.type) {
+                  case "message_start":
+                    if (event.message.role === "user") {
+                      setMessages((prev) => {
+                        const newMessages = [...prev];
+                        const userMessageIndex = newMessages.findIndex(
+                          (msg) =>
+                            msg.role === "user" && msg.id === userMessage.id
+                        );
+                        if (userMessageIndex !== -1) {
+                          newMessages[userMessageIndex] = {
+                            ...newMessages[userMessageIndex],
+                            id: event.message.id,
+                          };
+                        }
+                        return newMessages;
+                      });
+                    } else {
+                      setMessages((prev) => {
+                        const newMessages = [...prev];
+                        const lastMessage = newMessages[newMessages.length - 1];
+                        if (lastMessage?.role === "assistant") {
+                          lastMessage.id = event.message.id;
+                          lastMessage.usage = event.message.usage;
+                        }
+                        return newMessages;
+                      });
+                    }
+                    break;
+
+                  case "content_block_delta":
+                    if (
+                      event.delta?.type === "text_delta" &&
+                      typeof event.delta.text === "string"
+                    ) {
+                      responseText += event.delta.text;
+                      shouldAutoScroll.current = true; // Re-enable auto-scroll for each chunk
+
+                      setMessages((prev) => {
+                        const newMessages = [...prev];
+                        const lastMessage = newMessages[newMessages.length - 1];
+                        if (lastMessage?.role === "assistant") {
+                          lastMessage.content = [
+                            {
+                              type: "text",
+                              text: responseText,
+                              format: "markdown",
+                            },
+                          ];
+                        }
+                        return newMessages;
+                      });
+                    }
+                    break;
+                }
+              } catch (err) {
+                console.error("Error processing event:", err);
+                continue;
+              }
             }
           }
+        } finally {
+          reader.releaseLock();
         }
-      } finally {
-        reader.releaseLock();
-      }
 
-      // Fetch the final message to get complete usage information
-      const conversation =
-        await ConversationsService.getConversationConversationsConversationIdGet(
-          currentId
+        // Fetch the final message to get complete usage information
+        const conversation =
+          await ConversationsService.getConversationConversationsConversationIdGet(
+            currentId
+          );
+        const finalMessage = conversation.messages?.find(
+          (m: Message) => m.id === assistantMessageId
         );
-      const finalMessage = conversation.messages?.find(
-        (m: Message) => m.id === assistantMessageId
-      );
-      if (finalMessage) {
-        setMessages((prev) => {
-          const newMessages = [...prev];
-          const lastMessage = newMessages[newMessages.length - 1];
-          if (
-            lastMessage?.role === "assistant" &&
-            lastMessage.id === finalMessage.id
-          ) {
-            lastMessage.usage = finalMessage.usage;
-          }
-          return newMessages;
-        });
+        if (finalMessage) {
+          setMessages((prev) => {
+            const newMessages = [...prev];
+            const lastMessage = newMessages[newMessages.length - 1];
+            if (
+              lastMessage?.role === "assistant" &&
+              lastMessage.id === finalMessage.id
+            ) {
+              lastMessage.usage = finalMessage.usage;
+            }
+            return newMessages;
+          });
+        }
+      } catch (err) {
+        console.error("Error sending message:", err);
+        setError("Failed to send message");
+        throw err;
+      } finally {
+        setLoading(false);
       }
-    } catch (err) {
-      console.error("Error sending message:", err);
-      setError("Failed to send message");
-    } finally {
-      setLoading(false);
-    }
-  }, [currentId, message, isPreCached, conversations, updateConversations]);
-
-  // Memoized message input handlers
-  const debouncedSetMessage = useMemo(
-    () =>
-      debounce((value: string) => {
-        setMessage(value);
-      }, 100),
-    []
-  );
-
-  const handleMessageChange = useCallback(
-    (e: React.ChangeEvent<HTMLTextAreaElement>) => {
-      const value = e.target.value;
-      // Update the DOM value immediately for responsive typing
-      if (messageInputRef.current) {
-        messageInputRef.current.value = value;
-      }
-      // Debounce the state update
-      debouncedSetMessage(value);
     },
-    [debouncedSetMessage]
+    [currentId, isPreCached, conversations, updateConversations]
   );
-
-  const handleMessageSubmit = useCallback(() => {
-    const value = messageInputRef.current?.value || "";
-    if (value.trim() && !loading) {
-      setMessage(value);
-      handleSend();
-    }
-  }, [loading, handleSend]);
-
-  // Cleanup debounce on unmount
-  useEffect(() => {
-    return () => {
-      debouncedSetMessage.cancel();
-    };
-  }, [debouncedSetMessage]);
 
   // Load collapsed state from localStorage
   useEffect(() => {
@@ -668,7 +660,13 @@ export function Conversation({
   };
 
   return (
-    <Card className="h-full flex flex-col">
+    <Card
+      className={`h-full flex flex-col ${
+        isDragging ? "opacity-50 ring-2 ring-primary" : ""
+      }`}
+      ref={setNodeRef}
+      style={style}
+    >
       <div className="flex flex-1 min-h-0">
         <ConversationHistory
           className="border-r shadow-lg"
@@ -703,9 +701,9 @@ export function Conversation({
           isCollapsed={isHistoryCollapsed}
           onCollapsedChange={setIsHistoryCollapsed}
         />
-        <div className="flex-1 flex flex-col min-w-0 min-h-0">
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <div className="flex items-center gap-2">
+        <div className="flex-1 flex flex-col min-w-0 min-h-0 m-0 p-0">
+          <CardHeader className="p-2 flex flex-row items-center space-y-0 pb-2">
+            <div className="flex items-center gap-2 flex-1 min-w-0">
               {isEditingTitle ? (
                 <Input
                   ref={titleInputRef}
@@ -722,102 +720,135 @@ export function Conversation({
                   placeholder="Conversation Title"
                 />
               ) : (
-                <div
-                  className="flex items-center gap-2 group cursor-pointer"
-                  onClick={() => {
-                    if (currentId) {
-                      setEditedTitle(currentConversation?.name || "");
-                      setIsEditingTitle(true);
-                      setTimeout(() => titleInputRef.current?.focus(), 0);
-                    }
-                  }}
-                >
-                  <div className="flex flex-col">
-                    <CardTitle>
+                <div className="flex items-center gap-2 group cursor-pointer min-w-0">
+                  <div className="flex flex-col min-w-0">
+                    <CardTitle className="truncate">
                       {currentId
                         ? currentConversation?.name || "Untitled"
                         : "No Conversation Selected"}
                     </CardTitle>
                     {currentId && (
-                      <div className="text-3xs pt-0.5 text-muted-foreground">
+                      <div className="text-3xs pt-0.5 text-muted-foreground truncate">
                         {currentId}
                       </div>
                     )}
                   </div>
                   {currentId && (
                     <Edit2
-                      className="h-3.5 w-3.5 opacity-0 group-hover:opacity-100 transition-opacity"
+                      className="h-3.5 w-3.5 opacity-0 group-hover:opacity-100 transition-opacity flex-none"
                       strokeWidth={1.5}
                     />
                   )}
                 </div>
               )}
+              <div className="flex-1" />
+              {currentId && messages.length > 0 && (
+                <>
+                  <div
+                    {...attributes}
+                    {...listeners}
+                    className="h-6 w-6 cursor-grab active:cursor-grabbing hover:bg-accent rounded-sm flex items-center justify-center"
+                  >
+                    <GripVertical className="h-4 w-4 text-muted-foreground" />
+                  </div>
+                  <div className="flex-1" />
+                  <div className="flex items-center">
+                    <div className="flex gap-1">
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-6 w-6"
+                        onClick={async () => {
+                          try {
+                            const response = await fetch(
+                              `/api/conversations/${currentId}/clone`,
+                              {
+                                method: "POST",
+                              }
+                            );
+                            if (!response.ok)
+                              throw new Error("Failed to clone conversation");
+                            const clonedConv: ConversationType =
+                              await response.json();
+                            updateConversations((prev) => [
+                              clonedConv,
+                              ...prev,
+                            ]);
+                            setCurrentId(clonedConv.id);
+                            setMessages(clonedConv.messages || []);
+                          } catch (err) {
+                            console.error("Error cloning conversation:", err);
+                            setError("Failed to clone conversation");
+                          }
+                        }}
+                        title="Clone conversation"
+                      >
+                        <GitBranch className="h-4 w-4 text-muted-foreground" />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-6 w-6"
+                        onClick={handleDownloadTranscript}
+                        title="Download transcript"
+                      >
+                        <Download className="h-4 w-4 text-muted-foreground" />
+                      </Button>
+                    </div>
+                    {showCloseButton && (
+                      <>
+                        <div className="w-2" />
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-6 w-6"
+                          onClick={() => onRemove?.(id)}
+                        >
+                          <X className="h-4 w-4" />
+                        </Button>
+                      </>
+                    )}
+                  </div>
+                </>
+              )}
             </div>
-            {currentId && messages.length > 0 && (
-              <div className="flex gap-2">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={async () => {
-                    try {
-                      const response = await fetch(
-                        `/api/conversations/${currentId}/clone`,
-                        {
-                          method: "POST",
-                        }
-                      );
-                      if (!response.ok)
-                        throw new Error("Failed to clone conversation");
-                      const clonedConv: ConversationType =
-                        await response.json();
-                      updateConversations((prev) => [clonedConv, ...prev]);
-                      setCurrentId(clonedConv.id);
-                      setMessages(clonedConv.messages || []);
-                    } catch (err) {
-                      console.error("Error cloning conversation:", err);
-                      setError("Failed to clone conversation");
-                    }
-                  }}
-                >
-                  Clone
-                </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={handleDownloadTranscript}
-                >
-                  Download Transcript
-                </Button>
-              </div>
-            )}
           </CardHeader>
 
-          <CardContent className="flex-1 flex flex-col space-y-4 min-h-0">
-            <div className="flex gap-2 items-center">
+          <CardContent className="px-2 pt-2 flex-1 flex flex-col space-y-4 min-h-0 min-w-0">
+            <div className="p-0 flex gap-2 items-center">
               <Select
                 value={currentConversation?.system_prompt_id || "none"}
                 onValueChange={(value: string) =>
                   handleSystemPromptChange(value === "none" ? null : value)
                 }
               >
-                <SelectTrigger className="w-[300px]">
+                <SelectTrigger className="h-5 text-2xs flex-shrink-0 w-48">
                   <SelectValue placeholder="Select System Prompt" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="none">No System Prompt</SelectItem>
-                  {systemPrompts.map((prompt) => (
-                    <SelectItem key={prompt.id} value={prompt.id}>
-                      {prompt.name}
-                    </SelectItem>
-                  ))}
+                  <SelectItem value="none" className="text-2xs">
+                    No System Prompt
+                  </SelectItem>
+                  {systemPrompts
+                    .sort((a, b) => a.name.localeCompare(b.name))
+                    .map((prompt) => (
+                      <SelectItem
+                        key={prompt.id}
+                        value={prompt.id}
+                        className="text-2xs"
+                      >
+                        {prompt.name}
+                      </SelectItem>
+                    ))}
                 </SelectContent>
               </Select>
               <Button
-                variant="outline"
-                size="sm"
+                variant="ghost"
+                size="icon"
                 onClick={handleNewSystemPrompt}
+                className="h-5 w-5"
               >
-                New
+                <Plus className="text-muted-foreground scale-75 transform" />
               </Button>
               <div className="flex-1" />
               <Button
@@ -834,8 +865,8 @@ export function Conversation({
               </Button>
             </div>
 
-            <ScrollArea className="flex-1 border rounded-md p-4 min-h-0">
-              <div className="space-y-4">
+            <ScrollArea className="flex-1 border rounded-md p-2 min-h-0 [&_[data-radix-scroll-area-viewport]>div]:!block">
+              <div className="space-y-4 w-full">
                 {messages.map((msg, index) => (
                   <MessageComponent
                     key={msg.id || index}
@@ -871,50 +902,21 @@ export function Conversation({
               </div>
             )}
 
-            <div className="flex flex-col gap-2">
-              <SmallTextarea
-                ref={messageInputRef}
-                className="resize-none"
-                placeholder="Type your message here..."
-                rows={3}
-                defaultValue=""
-                onChange={handleMessageChange}
-                onKeyDown={(e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-                  if (e.key === "Enter" && !e.shiftKey) {
-                    e.preventDefault();
-                    handleMessageSubmit();
-                  }
-                }}
-              />
-              <div className="flex justify-end items-center gap-4">
-                <div className="flex items-center gap-1.5 scale-90">
-                  <Checkbox
-                    id="pre-cache"
-                    checked={isPreCached}
-                    onCheckedChange={(checked) => {
-                      if (typeof checked === "boolean") {
-                        setIsPreCached(checked);
-                      }
-                    }}
-                  />
-                  <label
-                    htmlFor="pre-cache"
-                    className="text-2xs text-muted-foreground cursor-pointer select-none"
-                  >
-                    Cache message
-                  </label>
-                </div>
-                <Button
-                  size="sm"
-                  onClick={handleMessageSubmit}
-                  disabled={
-                    loading || !(messageInputRef.current?.value || "").trim()
-                  }
-                >
-                  {loading ? "Sending..." : "Send"}
-                </Button>
-              </div>
-            </div>
+            <MessageInput
+              ref={messageInputRef}
+              onSend={async (newMessage) => {
+                try {
+                  await handleSend(newMessage);
+                  messageInputRef.current?.clear();
+                } catch (err) {
+                  // Don't clear the input if sending failed
+                  return;
+                }
+              }}
+              isPreCached={isPreCached}
+              onPreCacheChange={setIsPreCached}
+              loading={loading}
+            />
           </CardContent>
         </div>
       </div>

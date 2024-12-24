@@ -64,125 +64,115 @@ export function ConversationHistory({
   return (
     <div
       className={cn(
-        "bg-card transition-all duration-300 ease-in-out overflow-hidden rounded-l-xl",
+        "bg-card transition-all duration-300 ease-in-out overflow-hidden rounded-l-xl relative",
         isCollapsed ? "w-[32px]" : "w-[300px]",
         className
       )}
     >
-      <div className="flex h-full">
-        <div
-          className={cn(
-            "transition-all duration-300 ease-in-out",
-            isCollapsed ? "w-[32px]" : "w-[300px]"
-          )}
+      <div className="absolute left-0 top-2 z-30">
+        <Button
+          variant="ghost"
+          size="icon"
+          onClick={() => onCollapsedChange?.(!isCollapsed)}
+          className="w-[32px] h-8"
         >
-          <div className="h-full flex">
-            <div className="flex-none py-2 px-1">
+          {isCollapsed ? (
+            <ChevronRight className="h-4 w-4" />
+          ) : (
+            <ChevronLeft className="h-4 w-4" />
+          )}
+        </Button>
+      </div>
+
+      {!isCollapsed && (
+        <div className="w-full h-full">
+          <CardHeader className="p-3 flex flex-row items-center space-y-0">
+            <div className="flex items-center gap-2 flex-1 min-w-0 pl-6 relative z-20">
+              <div className="flex flex-col min-w-0">
+                <CardTitle className="text-xs font-medium text-muted-foreground">
+                  Conversations
+                </CardTitle>
+              </div>
               <Button
                 variant="ghost"
                 size="icon"
-                onClick={() => onCollapsedChange?.(!isCollapsed)}
-                className="h-5 w-5"
+                onClick={onNew}
+                disabled={disableNew}
+                className="h-5 w-5 relative z-20"
               >
-                {isCollapsed ? (
-                  <ChevronRight className="h-3 w-3" />
-                ) : (
-                  <ChevronLeft className="h-3 w-3" />
-                )}
+                <Plus className="text-muted-foreground scale-75 transform" />
               </Button>
             </div>
-
-            {!isCollapsed && (
-              <div className="flex-1 min-w-0">
-                <CardHeader className="pb-2 px-2 space-y-1">
-                  <div className="flex items-center justify-between -mt-[20px]">
-                    <CardTitle className="text-xs font-medium">
-                      Chat History
-                    </CardTitle>
+          </CardHeader>
+          <CardContent className="px-2 pt-2 flex-1 flex flex-col space-y-4 min-h-0 min-w-0">
+            <div className="p-0 flex gap-2 items-center">
+              <SmallInput
+                placeholder="Search..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="h-5 flex-1"
+              />
+              <Select
+                value={sortOption}
+                onValueChange={(value) => setSortOption(value as SortOption)}
+              >
+                <SelectTrigger className="h-5 text-2xs flex-shrink-0 w-20">
+                  <SelectValue placeholder="Sort" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="new-to-old" className="text-2xs">
+                    Newest
+                  </SelectItem>
+                  <SelectItem value="old-to-new" className="text-2xs">
+                    Oldest
+                  </SelectItem>
+                  <SelectItem value="a-to-z" className="text-2xs">
+                    A to Z
+                  </SelectItem>
+                  <SelectItem value="z-to-a" className="text-2xs">
+                    Z to A
+                  </SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <ScrollArea className="h-[calc(100vh-9rem)] min-h-0">
+              <div className="space-y-0.5">
+                {filteredAndSortedConversations.map((conv) => (
+                  <div
+                    key={conv.id}
+                    className={cn(
+                      "flex items-center gap-1 hover:bg-accent py-0.5 px-2",
+                      selectedId === conv.id ? "bg-accent" : ""
+                    )}
+                  >
+                    <div
+                      className="min-w-0 flex-1 cursor-pointer"
+                      onClick={() => handleSelect(conv)}
+                    >
+                      <div className="text-2xs truncate">
+                        {conv.name || "Untitled"}
+                      </div>
+                      <div className="text-3xs text-muted-foreground">
+                        {(conv.messages?.length || 0) +
+                          (conv.system_prompt_id ? 1 : 0)}{" "}
+                        messages
+                      </div>
+                    </div>
                     <Button
                       variant="ghost"
                       size="icon"
-                      onClick={onNew}
-                      disabled={disableNew}
+                      onClick={(e) => handleDelete(e, conv)}
+                      className="h-3.5 w-3.5"
                     >
-                      <Plus className="h-2.5 w-2.5 scale-75 transform" />
+                      <Trash2 className="text-muted-foreground scale-75 transform" />
                     </Button>
                   </div>
-                  <div className="flex gap-1 pt-2">
-                    <SmallInput
-                      placeholder="Search..."
-                      value={searchQuery}
-                      onChange={(e) => setSearchQuery(e.target.value)}
-                      className="h-5"
-                    />
-                    <Select
-                      value={sortOption}
-                      onValueChange={(value) =>
-                        setSortOption(value as SortOption)
-                      }
-                    >
-                      <SelectTrigger className="h-5 text-2xs flex-shrink-0 w-20">
-                        <SelectValue placeholder="Sort" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="new-to-old" className="text-2xs">
-                          Newest
-                        </SelectItem>
-                        <SelectItem value="old-to-new" className="text-2xs">
-                          Oldest
-                        </SelectItem>
-                        <SelectItem value="a-to-z" className="text-2xs">
-                          A to Z
-                        </SelectItem>
-                        <SelectItem value="z-to-a" className="text-2xs">
-                          Z to A
-                        </SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                </CardHeader>
-                <CardContent className="p-0">
-                  <ScrollArea className="h-[calc(100vh-9.5rem)]">
-                    <div className="px-2 space-y-0.5">
-                      {filteredAndSortedConversations.map((conv) => (
-                        <div
-                          key={conv.id}
-                          className={cn(
-                            "flex items-center gap-1 rounded-sm hover:bg-accent py-0.5 pr-1 pl-1",
-                            selectedId === conv.id ? "bg-accent" : ""
-                          )}
-                        >
-                          <div
-                            className="min-w-0 flex-1 cursor-pointer"
-                            onClick={() => handleSelect(conv)}
-                          >
-                            <div className="text-2xs truncate">
-                              {conv.name || "Untitled"}
-                            </div>
-                            <div className="text-3xs text-muted-foreground">
-                              {(conv.messages?.length || 0) +
-                                (conv.system_prompt_id ? 1 : 0)}{" "}
-                              messages
-                            </div>
-                          </div>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            onClick={(e) => handleDelete(e, conv)}
-                            className="h-3.5 w-3.5"
-                          >
-                            <Trash2 className="text-muted-foreground scale-75 transform" />
-                          </Button>
-                        </div>
-                      ))}
-                    </div>
-                  </ScrollArea>
-                </CardContent>
+                ))}
               </div>
-            )}
-          </div>
+            </ScrollArea>
+          </CardContent>
         </div>
-      </div>
+      )}
     </div>
   );
 }
