@@ -239,7 +239,7 @@ async def add_message(conv_id: str, message: Message) -> StreamingResponse:
                 stream = client.messages.create(
                     model=metadata.model,
                     max_tokens=metadata.max_tokens,
-                    system=system_content if isinstance(system_content, str) else "",
+                    system=system_content,
                     messages=anthropic_messages,
                     stream=True,
                 )
@@ -286,12 +286,18 @@ async def add_message(conv_id: str, message: Message) -> StreamingResponse:
                                 "text": delta_text,
                             }
                     elif chunk.type == "message_delta":
-                        # Update output tokens from final usage data
+                        # Update all token usage fields from final usage data
                         delta_usage = getattr(chunk, "usage", None)
                         if delta_usage and usage_data:
-                            output_tokens = getattr(delta_usage, "output_tokens", None)
-                            if output_tokens is not None:
-                                usage_data.output_tokens = output_tokens
+                            for field in [
+                                "output_tokens",
+                                "cache_read_input_tokens",
+                                "cache_creation_input_tokens",
+                                "input_tokens",
+                            ]:
+                                value = getattr(delta_usage, field, None)
+                                if value is not None:
+                                    setattr(usage_data, field, value)
 
                     yield f"data: {json.dumps(event)}\n\n"
 

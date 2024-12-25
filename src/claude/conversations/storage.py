@@ -1,5 +1,7 @@
+import fcntl
 import os
 import tempfile
+from contextlib import contextmanager
 from datetime import datetime, timezone
 from typing import Any, Dict, List, cast
 
@@ -14,23 +16,32 @@ def atomic_write_yaml(path: str, data: Dict[str, Any] | List[Any]) -> None:
     """Write data to a file atomically using a temporary file."""
     # Create temporary file in same directory to ensure atomic move
     directory = os.path.dirname(path)
-    with tempfile.NamedTemporaryFile(mode="w", dir=directory, delete=False) as tf:
-        # Write data to temp file
-        yaml.safe_dump(
-            data,
-            tf,
-            default_flow_style=False,
-            allow_unicode=True,
-            sort_keys=False,
-        )
-        tf.flush()  # Ensure all data is written
+    temp_file = None
+    try:
+        with tempfile.NamedTemporaryFile(mode="w", dir=directory, delete=False) as tf:
+            temp_file = tf.name
+            # Write data to temp file
+            yaml.safe_dump(
+                data,
+                tf,
+                default_flow_style=False,
+                allow_unicode=True,
+                sort_keys=False,
+            )
+            tf.flush()  # Ensure all data is written
+            os.fsync(tf.fileno())  # Force write to disk
 
         # Atomic rename temp file to target
-        try:
-            os.replace(tf.name, path)
-        except:
-            os.unlink(tf.name)  # Clean up temp file
-            raise
+        os.replace(temp_file, path)
+    except Exception:
+        if temp_file and os.path.exists(temp_file):
+            try:
+                os.unlink(temp_file)
+            except Exception as cleanup_error:
+                print(
+                    f"[atomic_write_yaml] Error cleaning up temp file: {cleanup_error}"
+                )
+        raise
 
 
 def ensure_conversations_dir(conv_id: str) -> str:
@@ -119,21 +130,48 @@ def update_message_count(conv_id: str, count: int) -> None:
     save_metadata(metadata)
 
 
-def load_metadata_index() -> List[ConversationMetadata]:
-    """Load all conversation metadata from the index file."""
-    index_path = os.path.join(CONVERSATIONS_DIR, "_metadata.yaml")
+@contextmanager
+def file_lock(path: str):
+    """Provide exclusive file locking."""
+    lock_path = f"{path}.lock"
+    lock_file = None
     try:
-        with open(index_path, "r", encoding="utf-8") as f:
-            raw_data = yaml.safe_load(f)
-            data = cast(
-                List[Dict[str, Any]], raw_data if isinstance(raw_data, list) else []
-            )
-            return [ConversationMetadata(**item) for item in data]
-    except FileNotFoundError:
-        return []
+        lock_file = open(lock_path, "w")
+        fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX)
+        yield
+    finally:
+        if lock_file:
+            fcntl.flock(lock_file.fileno(), fcntl.LOCK_UN)
+            lock_file.close()
+            try:
+                os.unlink(lock_path)
+            except OSError:
+                pass
 
 
 def save_metadata_index(metadata_list: List[ConversationMetadata]) -> None:
     """Save all conversation metadata to a single index file."""
     index_path = os.path.join(CONVERSATIONS_DIR, "_metadata.yaml")
-    atomic_write_yaml(index_path, [m.model_dump() for m in metadata_list])
+
+    with file_lock(index_path):
+        try:
+            atomic_write_yaml(index_path, [m.model_dump() for m in metadata_list])
+        except Exception:
+            raise
+
+
+def load_metadata_index() -> List[ConversationMetadata]:
+    """Load all conversation metadata from the index file."""
+    index_path = os.path.join(CONVERSATIONS_DIR, "_metadata.yaml")
+
+    with file_lock(index_path):
+        try:
+            with open(index_path, "r", encoding="utf-8") as f:
+                raw_data = yaml.safe_load(f)
+                data = cast(
+                    List[Dict[str, Any]], raw_data if isinstance(raw_data, list) else []
+                )
+                result = [ConversationMetadata(**item) for item in data]
+                return result
+        except FileNotFoundError:
+            return []

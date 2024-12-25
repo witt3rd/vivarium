@@ -132,7 +132,12 @@ export function Conversation({
         const updatedCount = (currentMetadata?.message_count ?? 0) + 2;
         onConversationsChange(
           conversations.map((c) =>
-            c.id === currentId ? { ...c, message_count: updatedCount } : c
+            c.id === currentId && currentMetadata
+              ? {
+                  ...currentMetadata,
+                  message_count: updatedCount,
+                }
+              : c
           )
         );
 
