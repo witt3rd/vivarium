@@ -69,6 +69,8 @@ async def create_metadata(metadata: MetadataCreate) -> ConversationMetadata:
         model=metadata.model or "claude-3-5-sonnet-20241022",
         max_tokens=metadata.max_tokens or 8192,
         tags=metadata.tags,
+        audio_enabled=False,
+        voice_id=None,
     )
     save_metadata(new_metadata)
     return new_metadata
@@ -97,6 +99,12 @@ async def update_metadata(conv_id: str, update: MetadataUpdate) -> ConversationM
     metadata.model = update.model or metadata.model
     metadata.max_tokens = update.max_tokens or metadata.max_tokens
     metadata.tags = update.tags
+
+    # Update TTS fields if provided
+    if update.audio_enabled is not None:
+        metadata.audio_enabled = update.audio_enabled
+    if update.voice_id is not None:
+        metadata.voice_id = update.voice_id
 
     save_metadata(metadata)
     return metadata

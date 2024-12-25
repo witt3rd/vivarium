@@ -3,8 +3,8 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
 import { SmallInput, SmallTextarea } from "@/components/ui/small-inputs";
-import { Copy, Edit2, Trash2 } from "lucide-react";
-import { useState } from "react";
+import { Copy, Edit2, Pause, Play, Trash2 } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
 import { MessageContent as MessageContentComponent } from "./message-content";
 
 interface MessageContent {
@@ -19,6 +19,10 @@ interface MessageProps {
   onDelete?: (messageId: string) => void;
   isCached?: boolean;
   onCacheChange?: (messageId: string, cached: boolean) => void;
+  conversationMetadata: {
+    audioEnabled: boolean;
+    voiceModel: string | null;
+  };
 }
 
 export function MessageComponent({
@@ -27,13 +31,114 @@ export function MessageComponent({
   onDelete,
   isCached = false,
   onCacheChange,
+  conversationMetadata,
 }: MessageProps) {
   const [isEditing, setIsEditing] = useState(false);
   const [editedContent, setEditedContent] = useState<MessageContent[]>(
     message.content as MessageContent[]
   );
+  const [isPlaying, setIsPlaying] = useState(false);
+  const audioContextRef = useRef<AudioContext | null>(null);
+  const sourceNodeRef = useRef<AudioBufferSourceNode | null>(null);
 
   const isSystemPrompt = message.role === "system";
+
+  const shouldDisplayPlayButton =
+    message.role === "assistant" &&
+    conversationMetadata?.audioEnabled &&
+    conversationMetadata?.voiceModel;
+
+  const stopAudio = () => {
+    if (sourceNodeRef.current) {
+      sourceNodeRef.current.stop();
+      sourceNodeRef.current.disconnect();
+      sourceNodeRef.current = null;
+    }
+    if (audioContextRef.current) {
+      audioContextRef.current.close();
+      audioContextRef.current = null;
+    }
+    setIsPlaying(false);
+  };
+
+  const playAudio = async (audioData: ArrayBuffer) => {
+    try {
+      // Create new audio context
+      audioContextRef.current = new AudioContext();
+
+      // Decode the audio data
+      const audioBuffer = await audioContextRef.current.decodeAudioData(
+        audioData
+      );
+
+      // Create and configure source node
+      sourceNodeRef.current = audioContextRef.current.createBufferSource();
+      sourceNodeRef.current.buffer = audioBuffer;
+      sourceNodeRef.current.connect(audioContextRef.current.destination);
+
+      // Handle playback completion
+      sourceNodeRef.current.onended = () => {
+        stopAudio();
+      };
+
+      // Start playback
+      sourceNodeRef.current.start();
+      setIsPlaying(true);
+    } catch (error) {
+      console.error("Error playing audio:", error);
+      stopAudio();
+    }
+  };
+
+  const handlePlayStop = async () => {
+    if (isPlaying) {
+      stopAudio();
+      return;
+    }
+
+    try {
+      const messageText = message.content
+        .map((c) => (c as MessageContent).text)
+        .join("\n");
+
+      const response = await fetch(
+        `https://api.elevenlabs.io/v1/text-to-speech/${conversationMetadata.voiceModel}`,
+        {
+          method: "POST",
+          headers: {
+            Accept: "audio/mpeg",
+            "Content-Type": "application/json",
+            "xi-api-key": import.meta.env.VITE_ELEVENLABS_API_KEY,
+          },
+          body: JSON.stringify({
+            model_id: "eleven_multilingual_v2",
+            text: messageText,
+            voice_settings: {
+              similarity_boost: 0.5,
+              stability: 0.5,
+            },
+          }),
+        }
+      );
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      const arrayBuffer = await response.arrayBuffer();
+      await playAudio(arrayBuffer);
+    } catch (error) {
+      console.error("Error fetching or playing audio:", error);
+      stopAudio();
+    }
+  };
+
+  // Cleanup audio context when component unmounts
+  useEffect(() => {
+    return () => {
+      stopAudio();
+    };
+  }, []);
 
   const handleEdit = () => {
     if (!isEditing) {
@@ -83,6 +188,21 @@ export function MessageComponent({
           </span>
         </div>
         <div className="flex items-center gap-1">
+          {shouldDisplayPlayButton && (
+            <Button
+              variant="ghost"
+              className="h-4 w-4 p-0 hover:bg-transparent"
+              onClick={handlePlayStop}
+            >
+              <div className="scale-50 transform">
+                {isPlaying ? (
+                  <Pause size={16} strokeWidth={1} />
+                ) : (
+                  <Play size={16} strokeWidth={1} />
+                )}
+              </div>
+            </Button>
+          )}
           <div className="flex items-center gap-2 scale-50 transform">
             <Checkbox
               id={`cache-${message.id}`}

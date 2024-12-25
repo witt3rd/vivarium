@@ -8,6 +8,7 @@ import { ConversationsService } from "@/api/services/ConversationsService";
 import { SystemPromptsService } from "@/api/services/SystemPromptsService";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import {
@@ -21,6 +22,8 @@ import { sortConversations } from "@/lib/conversation-sort";
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import {
+  ChevronsDown,
+  ChevronsUp,
   Download,
   Edit2,
   GitBranch,
@@ -32,6 +35,13 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { ConversationHistory } from "./conversation-history";
 import { MessageComponent } from "./message";
 import { MessageInput, MessageInputHandle } from "./message-input";
+
+// Define a type for the voice category
+const categoryOrder: Record<string, number> = {
+  cloned: 0,
+  generated: 1,
+  premade: 2,
+};
 
 export function Conversation({
   conversations,
@@ -72,6 +82,61 @@ export function Conversation({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isHistoryCollapsed, setIsHistoryCollapsed] = useState(false);
+
+  // Add state variables for TTS controls
+  const [audioEnabled, setAudioEnabled] = useState<boolean>(false);
+  const [selectedVoiceId, setSelectedVoiceId] = useState<string | null>(null);
+
+  // Add a function to fetch and cache voices
+  const [voices, setVoices] = useState<
+    { voice_id: string; name: string; category: string }[]
+  >([]);
+  const [loadingVoices, setLoadingVoices] = useState<boolean>(false);
+
+  // Add error state for fetching voices
+  const [fetchError, setFetchError] = useState<boolean>(false);
+
+  const fetchVoices = useCallback(async () => {
+    if (voices.length > 0 || loadingVoices || fetchError) return; // Use cached voices if available, if already loading, or if there's an error
+    setLoadingVoices(true);
+    try {
+      const response = await fetch("https://api.elevenlabs.io/v1/voices", {
+        method: "GET",
+        headers: {
+          Accept: "application/json",
+          "xi-api-key": import.meta.env.VITE_ELEVENLABS_API_KEY,
+          "Content-Type": "application/json",
+        },
+      });
+      if (!response.ok) {
+        setFetchError(true);
+        setError(
+          `Failed to fetch voices: HTTP error! status: ${response.status}`
+        );
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+      const data: {
+        voices: { voice_id: string; name: string; category: string }[];
+      } = await response.json();
+      setVoices(
+        data.voices.map((voice) => ({
+          voice_id: voice.voice_id,
+          name: voice.name,
+          category: voice.category || "premade",
+        }))
+      );
+      setFetchError(false); // Reset error state on success
+      setError(null); // Clear error message on success
+    } catch (error) {
+      console.error("Error fetching voices:", error);
+      setVoices([]); // Ensure voices is always an array
+      setError(
+        "Failed to fetch voices. Please check your network connection and API key."
+      );
+    } finally {
+      setLoadingVoices(false);
+    }
+  }, [voices, loadingVoices, fetchError]);
 
   const currentMetadata = conversations.find((m) => m.id === currentId);
 
@@ -349,12 +414,21 @@ export function Conversation({
         } else {
           setMessages(messages);
         }
+
+        // Initialize audio settings from metadata
+        setAudioEnabled(currentMetadata?.audio_enabled ?? false);
+        setSelectedVoiceId(currentMetadata?.voice_id ?? null);
       })
       .catch((error: unknown) => {
         console.error("Error loading messages:", error);
         setError("Failed to load messages");
       });
-  }, [currentId, currentMetadata?.system_prompt_id]);
+  }, [
+    currentId,
+    currentMetadata?.system_prompt_id,
+    currentMetadata?.audio_enabled,
+    currentMetadata?.voice_id,
+  ]);
 
   const handleNewConversation = async () => {
     try {
@@ -371,8 +445,8 @@ export function Conversation({
         setCurrentId(metadata.id);
         setMessages([]);
       }
-    } catch (err) {
-      console.error("Error creating conversation:", err);
+    } catch (error) {
+      console.error("Error creating conversation:", error);
       setError("Failed to create conversation");
     }
   };
@@ -395,8 +469,8 @@ export function Conversation({
         conversations.map((c) => (c.id === currentId ? updated : c))
       );
       setIsEditingTitle(false);
-    } catch (err) {
-      console.error("Error updating title:", err);
+    } catch (error) {
+      console.error("Error updating title:", error);
       setError("Failed to update title");
     }
   };
@@ -685,6 +759,21 @@ export function Conversation({
     }
   }, [isEditingTitle]);
 
+  // Fetch voices when audio is enabled
+  useEffect(() => {
+    if (audioEnabled) {
+      fetchVoices();
+    }
+  }, [audioEnabled, fetchVoices]);
+
+  // Initialize state when conversation changes
+  useEffect(() => {
+    if (currentConversation) {
+      setAudioEnabled(currentConversation.audio_enabled ?? false);
+      setSelectedVoiceId(currentConversation.voice_id ?? null);
+    }
+  }, [currentConversation]);
+
   return (
     <Card
       className={`h-full flex flex-col ${
@@ -849,18 +938,153 @@ export function Conversation({
                 <Plus className="text-muted-foreground scale-75 transform" />
               </Button>
               <div className="flex-1" />
-              <Button
-                variant="ghost"
-                size="icon"
-                className="p-0 h-5 w-5"
-                onClick={() =>
-                  messagesEndRef.current?.parentElement?.scrollIntoView({
-                    behavior: "smooth",
-                  })
-                }
+              <div className="flex items-center gap-2 scale-75 transform">
+                <Checkbox
+                  checked={audioEnabled}
+                  onCheckedChange={(checked) => {
+                    const isChecked = checked === true;
+                    // If enabling TTS and no voice is selected, select the first available voice
+                    const newVoiceId =
+                      isChecked && !selectedVoiceId && voices.length > 0
+                        ? voices[0].voice_id
+                        : selectedVoiceId;
+
+                    setAudioEnabled(isChecked);
+                    if (newVoiceId !== selectedVoiceId) {
+                      setSelectedVoiceId(newVoiceId);
+                    }
+
+                    if (currentId) {
+                      const newMetadata = {
+                        name: currentMetadata?.name ?? "New Conversation",
+                        system_prompt_id:
+                          currentMetadata?.system_prompt_id ?? null,
+                        model:
+                          currentMetadata?.model ??
+                          "claude-3-5-sonnet-20241022",
+                        max_tokens: currentMetadata?.max_tokens ?? 8192,
+                        audio_enabled: isChecked,
+                        voice_id: newVoiceId,
+                      };
+                      ConversationsService.updateMetadataConversationsConvIdMetadataPut(
+                        currentId,
+                        newMetadata
+                      )
+                        .then((updated) => {
+                          onConversationsChange(
+                            conversations.map((c) =>
+                              c.id === currentId ? updated : c
+                            )
+                          );
+                        })
+                        .catch((error) => {
+                          console.error(
+                            "Error updating audio settings:",
+                            error
+                          );
+                          setError("Failed to update audio settings");
+                          // Revert the local state on error
+                          setAudioEnabled(
+                            currentConversation?.audio_enabled ?? false
+                          );
+                          setSelectedVoiceId(
+                            currentConversation?.voice_id ?? null
+                          );
+                        });
+                    }
+                  }}
+                />
+                <label
+                  htmlFor="audio-enabled"
+                  className="text-2xs font-medium text-muted-foreground/70 cursor-pointer select-none"
+                >
+                  TTS
+                </label>
+              </div>
+              <Select
+                value={selectedVoiceId ?? voices[0]?.voice_id}
+                onValueChange={(value: string) => {
+                  setSelectedVoiceId(value);
+                  if (currentId) {
+                    const newMetadata = {
+                      name: currentMetadata?.name ?? "New Conversation",
+                      system_prompt_id:
+                        currentMetadata?.system_prompt_id ?? null,
+                      model:
+                        currentMetadata?.model ?? "claude-3-5-sonnet-20241022",
+                      max_tokens: currentMetadata?.max_tokens ?? 8192,
+                      audio_enabled: audioEnabled,
+                      voice_id: value,
+                    };
+                    ConversationsService.updateMetadataConversationsConvIdMetadataPut(
+                      currentId,
+                      newMetadata
+                    )
+                      .then((updated) => {
+                        onConversationsChange(
+                          conversations.map((c) =>
+                            c.id === currentId ? updated : c
+                          )
+                        );
+                      })
+                      .catch((error) => {
+                        console.error("Error updating audio settings:", error);
+                        setError("Failed to update audio settings");
+                        // Revert the local state on error
+                        setSelectedVoiceId(
+                          currentConversation?.voice_id ?? null
+                        );
+                      });
+                  }
+                }}
+                disabled={!audioEnabled}
               >
-                ↑
-              </Button>
+                <SelectTrigger className="h-5 text-2xs flex-shrink-0 w-48">
+                  <SelectValue placeholder="Select Voice" />
+                </SelectTrigger>
+                <SelectContent>
+                  {voices
+                    .sort((a, b) => {
+                      if (
+                        categoryOrder[a.category] !== categoryOrder[b.category]
+                      ) {
+                        return (
+                          categoryOrder[a.category] - categoryOrder[b.category]
+                        );
+                      }
+                      return a.name.localeCompare(b.name);
+                    })
+                    .reduce((acc, voice, index, array) => {
+                      if (
+                        index === 0 ||
+                        voice.category !== array[index - 1].category
+                      ) {
+                        acc.push(
+                          <SelectItem
+                            key={`separator-${voice.category}`}
+                            value={`separator-${voice.category}`}
+                            disabled
+                            className="text-2xs font-bold"
+                          >
+                            {voice.category.charAt(0).toUpperCase() +
+                              voice.category.slice(1)}{" "}
+                            Voices
+                          </SelectItem>
+                        );
+                      }
+                      acc.push(
+                        <SelectItem
+                          key={voice.voice_id}
+                          value={voice.voice_id}
+                          className="text-2xs"
+                        >
+                          {voice.name}
+                        </SelectItem>
+                      );
+                      return acc;
+                    }, [] as JSX.Element[])}
+                </SelectContent>
+              </Select>
             </div>
 
             <ScrollArea className="flex-1 border rounded-md p-2 min-h-0 [&_[data-radix-scroll-area-viewport]>div]:!block">
@@ -873,6 +1097,10 @@ export function Conversation({
                     isCached={msg.cache || false}
                     onCacheChange={handleToggleCache}
                     onEdit={handleMessageEdit}
+                    conversationMetadata={{
+                      audioEnabled: currentConversation?.audio_enabled || false,
+                      voiceModel: currentConversation?.voice_id || null,
+                    }}
                   />
                 ))}
                 <div ref={messagesEndRef} />
@@ -885,12 +1113,24 @@ export function Conversation({
                 size="icon"
                 className="p-0 h-5 w-5"
                 onClick={() =>
+                  messagesEndRef.current?.parentElement?.scrollIntoView({
+                    behavior: "smooth",
+                  })
+                }
+              >
+                <ChevronsUp className="h-4 w-4" />
+              </Button>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="p-0 h-5 w-5"
+                onClick={() =>
                   messagesEndRef.current?.scrollIntoView({
                     behavior: "smooth",
                   })
                 }
               >
-                ↓
+                <ChevronsDown className="h-4 w-4" />
               </Button>
             </div>
 

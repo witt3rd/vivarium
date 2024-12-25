@@ -11,5 +11,7 @@ export type MetadataUpdate = {
     model?: (string | null);
     max_tokens?: (number | null);
     tags?: Array<string>;
+    audio_enabled?: (boolean | null);
+    voice_id?: (string | null);
 };
 

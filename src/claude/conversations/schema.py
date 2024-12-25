@@ -37,6 +37,8 @@ class ConversationMetadata(BaseModel):
     tags: List[str] = Field(default_factory=list)
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    audio_enabled: bool = False
+    voice_id: Optional[str] = None
 
 
 class MetadataUpdate(BaseModel):
@@ -47,6 +49,8 @@ class MetadataUpdate(BaseModel):
     model: Optional[str] = None
     max_tokens: Optional[int] = None
     tags: List[str] = Field(default_factory=list)
+    audio_enabled: Optional[bool] = None
+    voice_id: Optional[str] = None
 
 
 class MetadataCreate(BaseModel):

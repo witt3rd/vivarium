@@ -15,5 +15,7 @@ export type ConversationMetadata = {
     tags?: Array<string>;
     created_at?: string;
     updated_at?: string;
+    audio_enabled?: boolean;
+    voice_id?: (string | null);
 };
 

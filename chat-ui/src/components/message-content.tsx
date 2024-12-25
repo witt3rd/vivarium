@@ -51,6 +51,7 @@ export function MessageContent({ content }: MessageContentProps) {
     rehypeReactOptions: {
       components: {
         code: CodeBlock,
+        p: ({ children, ...props }) => <div {...props}>{children}</div>,
       },
     },
     onError: (err) => console.error("Error parsing markdown:", err),
