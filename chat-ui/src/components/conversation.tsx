@@ -794,9 +794,14 @@ export function Conversation({
         await ConversationsService.cloneConversationConversationsConvIdClonePost(
           currentId
         );
-      onConversationsChange([clonedConv, ...conversations]);
-      setCurrentId(clonedConv.id);
-      setMessages([]);
+      // Copy message count from source conversation for optimistic UI update
+      const sourceConv = conversations.find((c) => c.id === currentId);
+      const updatedClonedConv = {
+        ...clonedConv,
+        message_count: sourceConv?.message_count ?? 0,
+      };
+      onConversationsChange([updatedClonedConv, ...conversations]);
+      setCurrentId(updatedClonedConv.id);
     } catch (error) {
       console.error("Error cloning conversation:", error);
       setError("Failed to clone conversation");
