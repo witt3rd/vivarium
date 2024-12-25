@@ -13,16 +13,34 @@ class TokenUsage(BaseModel):
     output_tokens: Optional[int] = None
 
 
+class MessageImage(BaseModel):
+    """Reference to an uploaded image associated with a message."""
+
+    id: str  # UUID for the image
+    filename: str  # Original filename for reference
+    media_type: str  # MIME type (image/jpeg, etc)
+
+
 class Message(BaseModel):
     """A message in a conversation."""
 
     id: Optional[str] = None
     role: str
     content: List[Dict[str, Any]]  # List of content blocks (text, images, etc)
+    images: Optional[List[MessageImage]] = None  # References to uploaded images
     timestamp: Optional[str] = None
     cache: bool = False
     assistant_message_id: Optional[str] = None  # ID for the assistant's response
     usage: Optional[TokenUsage] = None  # Token usage information for assistant messages
+
+
+class MessageCreate(BaseModel):
+    """Schema for creating a new message with optional images."""
+
+    id: str  # Required - client generates UUID
+    assistant_message_id: str  # Required - client generates UUID for assistant response
+    content: List[Dict[str, Any]]  # Text content
+    cache: bool = False
 
 
 class ConversationMetadata(BaseModel):

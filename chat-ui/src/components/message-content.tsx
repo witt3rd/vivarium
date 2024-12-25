@@ -8,7 +8,12 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 interface MessageContent {
   type: string;
-  text: string;
+  text?: string;
+  source?: {
+    type: string;
+    media_type: string;
+    data: string;
+  };
   [key: string]: unknown;
 }
 
@@ -64,12 +69,19 @@ export function MessageContent({ content }: MessageContentProps) {
     return content
       .filter((c) => c.type === "text")
       .map((c) => {
-        return c.text.replace(
-          /<([^>]+)>([\s\S]*?)<\/\1>/g,
-          (_, tag, content) => `\`\`\`${tag}\n${content}\n\`\`\``
+        return (
+          c.text?.replace(
+            /<([^>]+)>([\s\S]*?)<\/\1>/g,
+            (_, tag, content) => `\`\`\`${tag}\n${content}\n\`\`\``
+          ) || ""
         );
       })
       .join("\n\n");
+  }, [content]);
+
+  // Extract images from content
+  const images = useMemo(() => {
+    return content.filter((c) => c.type === "image" && c.source);
   }, [content]);
 
   useEffect(() => {
@@ -104,10 +116,22 @@ export function MessageContent({ content }: MessageContentProps) {
         ref={contentRef}
         className="prose prose-xs dark:prose-invert w-full max-w-none"
       >
+        {images.length > 0 && (
+          <div className="flex flex-wrap gap-2 mb-4">
+            {images.map((image, index) => (
+              <img
+                key={index}
+                src={`data:${image.source?.media_type};base64,${image.source?.data}`}
+                alt={`Image ${index + 1}`}
+                className="max-h-64 rounded"
+              />
+            ))}
+          </div>
+        )}
         {reactContent}
       </div>
     );
-  }, [reactContent]);
+  }, [reactContent, images]);
 
   return (
     <div className="relative">

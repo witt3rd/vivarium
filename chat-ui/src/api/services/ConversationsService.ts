@@ -2,6 +2,7 @@
 /* istanbul ignore file */
 /* tslint:disable */
 /* eslint-disable */
+import type { Body_add_message_conversations__conv_id__messages_post } from '../models/Body_add_message_conversations__conv_id__messages_post';
 import type { ConversationMetadata } from '../models/ConversationMetadata';
 import type { Message } from '../models/Message';
 import type { MetadataCreate } from '../models/MetadataCreate';
@@ -113,13 +114,13 @@ export class ConversationsService {
      * Add Message
      * Add a message and get Claude's streaming response.
      * @param convId
-     * @param requestBody
+     * @param formData
      * @returns any Successful Response
      * @throws ApiError
      */
     public static addMessageConversationsConvIdMessagesPost(
         convId: string,
-        requestBody: Message,
+        formData: Body_add_message_conversations__conv_id__messages_post,
     ): CancelablePromise<any> {
         return __request(OpenAPI, {
             method: 'POST',
@@ -127,8 +128,8 @@ export class ConversationsService {
             path: {
                 'conv_id': convId,
             },
-            body: requestBody,
-            mediaType: 'application/json',
+            formData: formData,
+            mediaType: 'multipart/form-data',
             errors: {
                 422: `Validation Error`,
             },

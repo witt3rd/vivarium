@@ -43,6 +43,12 @@ const categoryOrder: Record<string, number> = {
   premade: 2,
 };
 
+// Add this helper function
+const getFileExtension = (filename: string): string => {
+  const lastDot = filename.lastIndexOf(".");
+  return lastDot === -1 ? "" : filename.slice(lastDot);
+};
+
 export function Conversation({
   conversations,
   onConversationsChange,
@@ -161,7 +167,7 @@ export function Conversation({
 
   // Memoized send handler
   const handleSend = useCallback(
-    async (messageText: string) => {
+    async (messageText: string, files?: File[]) => {
       if (!currentId || !messageText.trim()) return;
 
       try {
@@ -169,9 +175,29 @@ export function Conversation({
         setLoading(true);
         setError(null);
 
-        // Create messages with IDs that will be used throughout the operation
+        // Create message IDs
         const userMessageId = crypto.randomUUID();
         const assistantMessageId = crypto.randomUUID();
+
+        // Create image metadata first if we have files
+        const imageMetadata = files?.map((file) => {
+          const id = crypto.randomUUID();
+          const extension = getFileExtension(file.name);
+          return {
+            id,
+            filename: `${id}${extension}`,
+            media_type: file.type,
+            originalFile: file,
+          };
+        });
+
+        // Create the message data
+        const messageData = {
+          id: userMessageId,
+          assistant_message_id: assistantMessageId,
+          content: [{ type: "text", text: messageText }],
+          cache: isPreCached,
+        };
 
         // Add user message to UI immediately
         const userMessage: Message = {
@@ -180,9 +206,35 @@ export function Conversation({
           content: [{ type: "text", text: messageText }],
           timestamp: new Date().toISOString(),
           cache: isPreCached,
+          images: imageMetadata?.map(({ id, filename, media_type }) => ({
+            id,
+            filename,
+            media_type,
+          })),
         };
         setMessages((prev) => [...prev, userMessage]);
         setIsPreCached(false);
+
+        // Create FormData and append message data and files
+        const formData = new FormData();
+        formData.append("id", messageData.id);
+        formData.append(
+          "assistant_message_id",
+          messageData.assistant_message_id
+        );
+        formData.append("content", JSON.stringify(messageData.content));
+        formData.append("cache", messageData.cache.toString());
+
+        // Append files with their new filenames
+        if (imageMetadata) {
+          imageMetadata.forEach(({ filename, originalFile }) => {
+            // Create a new File object with the UUID filename
+            const renamedFile = new File([originalFile], filename, {
+              type: originalFile.type,
+            });
+            formData.append("files", renamedFile);
+          });
+        }
 
         // Create assistant message placeholder
         const assistantMessage: Message = {
@@ -211,16 +263,12 @@ export function Conversation({
           `/api/conversations/${currentId}/messages`,
           {
             method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              ...userMessage,
-              assistant_message_id: assistantMessageId,
-            }),
+            body: formData,
           }
         );
 
         if (!response.ok) {
-          // If the server request fails, rollback the UI changes
+          // If the server request fails, remove the messages
           setMessages((prev) =>
             prev.filter(
               (m) => m.id !== userMessageId && m.id !== assistantMessageId
@@ -236,6 +284,7 @@ export function Conversation({
           throw new Error(`HTTP error! status: ${response.status}`);
         }
 
+        // Handle server response
         const reader = response.body?.getReader();
         if (!reader) throw new Error("No reader available");
 
@@ -271,10 +320,7 @@ export function Conversation({
                             msg.role === "user" && msg.id === userMessage.id
                         );
                         if (userMessageIndex !== -1) {
-                          newMessages[userMessageIndex] = {
-                            ...newMessages[userMessageIndex],
-                            id: event.message.id,
-                          };
+                          newMessages[userMessageIndex] = event.message;
                         }
                         return newMessages;
                       });
@@ -297,7 +343,7 @@ export function Conversation({
                       typeof event.delta.text === "string"
                     ) {
                       responseText += event.delta.text;
-                      shouldAutoScroll.current = true; // Re-enable auto-scroll for each chunk
+                      shouldAutoScroll.current = true;
 
                       setMessages((prev) => {
                         const newMessages = [...prev];
@@ -326,7 +372,7 @@ export function Conversation({
           reader.releaseLock();
         }
 
-        // Fetch the final message to get complete usage information
+        // Get final message state
         const messages =
           await ConversationsService.getMessagesConversationsConvIdMessagesGet(
             currentId
@@ -353,7 +399,13 @@ export function Conversation({
         setLoading(false);
       }
     },
-    [currentId, isPreCached, currentMetadata?.message_count]
+    [
+      currentId,
+      isPreCached,
+      conversations,
+      currentMetadata,
+      onConversationsChange,
+    ]
   );
 
   // Load collapsed state from localStorage
@@ -1101,6 +1153,7 @@ export function Conversation({
                       audioEnabled: currentConversation?.audio_enabled || false,
                       voiceModel: currentConversation?.voice_id || null,
                     }}
+                    conversationId={currentId || ""}
                   />
                 ))}
                 <div ref={messagesEndRef} />
@@ -1142,12 +1195,13 @@ export function Conversation({
 
             <MessageInput
               ref={messageInputRef}
-              onSend={async (newMessage) => {
+              onSend={async (newMessage, files) => {
                 try {
-                  await handleSend(newMessage);
+                  await handleSend(newMessage, files);
                   messageInputRef.current?.clear();
-                } catch (err) {
+                } catch (error) {
                   // Don't clear the input if sending failed
+                  console.error("Error in message send:", error);
                   return;
                 }
               }}

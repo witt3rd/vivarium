@@ -1,21 +1,37 @@
+import base64
 import json
 import uuid
-from typing import Any, Awaitable, Callable, Dict, List, TypedDict, TypeVar
+from datetime import datetime, timezone
+from pathlib import Path
+from typing import (
+    Annotated,
+    Any,
+    Awaitable,
+    Callable,
+    Dict,
+    List,
+    TypedDict,
+    TypeVar,
+    cast,
+)
 
 from anthropic import Anthropic
 from anthropic.types import MessageParam
-from fastapi import APIRouter, HTTPException
-from fastapi.responses import StreamingResponse
+from fastapi import APIRouter, File, Form, HTTPException, UploadFile
+from fastapi.responses import FileResponse, StreamingResponse
 
 from ..system_prompts.storage import load_prompt
 from .schema import (
     ConversationMetadata,
     Message,
+    MessageCreate,
+    MessageImage,
     MetadataCreate,
     MetadataUpdate,
     TokenUsage,
 )
 from .storage import (
+    CONVERSATIONS_DIR,
     list_metadata,
     load_messages,
     load_metadata,
@@ -24,6 +40,14 @@ from .storage import (
     save_metadata,
     update_message_count,
 )
+
+
+def get_images_dir(conv_id: str) -> Path:
+    """Get the images directory for a conversation."""
+    conv_dir = Path(CONVERSATIONS_DIR) / conv_id / "images"
+    conv_dir.mkdir(parents=True, exist_ok=True)
+    return conv_dir
+
 
 # Type variable for generic transaction handling
 T = TypeVar("T")
@@ -148,15 +172,28 @@ async def update_message(
 
 @router.delete("/{conv_id}/messages/{message_id}", response_model=List[Message])
 async def delete_message(conv_id: str, message_id: str) -> List[Message]:
-    """Delete a message."""
+    """Delete a message and its associated images."""
 
     async def delete_operation() -> List[Message]:
         messages = load_messages(conv_id)
-        original_length = len(messages)
-        new_messages = [msg for msg in messages if msg.id != message_id]
 
-        if len(new_messages) == original_length:
+        # Find the message to delete
+        message_to_delete = next(
+            (msg for msg in messages if msg.id == message_id), None
+        )
+        if not message_to_delete:
             raise HTTPException(status_code=404, detail="Message not found")
+
+        # Delete associated images if they exist
+        if message_to_delete.images:
+            images_dir = get_images_dir(conv_id)
+            for image in message_to_delete.images:
+                image_path = images_dir / image.filename
+                if image_path.exists():
+                    image_path.unlink()
+
+        # Remove the message
+        new_messages = [msg for msg in messages if msg.id != message_id]
 
         # Update both messages and count in one operation
         save_messages(conv_id, new_messages)
@@ -182,7 +219,14 @@ async def toggle_message_cache(conv_id: str, message_id: str) -> List[Message]:
 
 
 @router.post("/{conv_id}/messages", response_model=None)
-async def add_message(conv_id: str, message: Message) -> StreamingResponse:
+async def add_message(
+    conv_id: str,
+    id: Annotated[str, Form()],
+    assistant_message_id: Annotated[str, Form()],
+    content: Annotated[str, Form()],
+    cache: Annotated[str, Form()],
+    files: List[UploadFile] = File(default=[]),
+) -> StreamingResponse:
     """Add a message and get Claude's streaming response."""
     # Load current state
     metadata = load_metadata(conv_id)
@@ -191,18 +235,92 @@ async def add_message(conv_id: str, message: Message) -> StreamingResponse:
     original_count = len(messages)
 
     try:
-        # Extract assistant_message_id if provided
-        assistant_message_id = None
-        if hasattr(message, "assistant_message_id"):
-            assistant_message_id = message.assistant_message_id
-            delattr(message, "assistant_message_id")
+        # Parse content from JSON string
+        content_list = cast(List[Dict[str, Any]], json.loads(content))
 
-        # Ensure message has an ID
-        if not message.id:
-            message.id = str(uuid.uuid4())
+        # Convert cache string to bool
+        cache_bool = cache.lower() == "true"
+
+        # Create message data
+        message = MessageCreate(
+            id=id,
+            assistant_message_id=assistant_message_id,
+            content=content_list,
+            cache=cache_bool,
+        )
+
+        # Process uploaded images
+        message_images: List[MessageImage] = []
+        if files:
+            for file in files:
+                if not file.filename:
+                    continue
+
+                # Extract ID from filename (remove extension)
+                image_id = str(Path(file.filename).stem)
+
+                # Determine extension and content type
+                if file.content_type:
+                    if file.content_type == "image/jpeg":
+                        ext = ".jpg"
+                        media_type = "image/jpeg"
+                    elif file.content_type == "image/png":
+                        ext = ".png"
+                        media_type = "image/png"
+                    elif file.content_type == "image/webp":
+                        ext = ".webp"
+                        media_type = "image/webp"
+                    else:
+                        # Unknown content type, try filename or default
+                        ext = str(Path(file.filename).suffix) or ".jpg"
+                        media_type = "image/jpeg"
+                else:
+                    # No content type, use filename extension if available
+                    ext = str(Path(file.filename).suffix)
+                    if ext.lower() in [".jpg", ".jpeg"]:
+                        media_type = "image/jpeg"
+                    elif ext.lower() == ".png":
+                        media_type = "image/png"
+                    elif ext.lower() == ".webp":
+                        media_type = "image/webp"
+                    else:
+                        # No valid extension found, use defaults
+                        ext = ".jpg"
+                        media_type = "image/jpeg"
+
+                filename = f"{image_id}{ext}"
+                save_path = get_images_dir(conv_id) / filename
+
+                try:
+                    content = await file.read()
+                    if isinstance(content, str):
+                        content = content.encode("utf-8")
+                    with open(save_path, "wb") as f:
+                        f.write(content)
+
+                    message_images.append(
+                        MessageImage(
+                            id=image_id,
+                            filename=filename,
+                            media_type=media_type,
+                        )
+                    )
+                except Exception:
+                    raise
+
+        # Create the user message
+        user_message = Message(
+            id=message.id,
+            role="user",
+            content=message.content,
+            images=message_images if message_images else None,
+            timestamp=datetime.now(timezone.utc).isoformat(),
+            cache=message.cache,
+            assistant_message_id=message.assistant_message_id,
+        )
 
         # Add the user's message atomically
-        messages.append(message)
+        messages.append(user_message)
         save_messages(conv_id, messages)
         update_message_count(conv_id, len(messages))
 
@@ -225,14 +343,38 @@ async def add_message(conv_id: str, message: Message) -> StreamingResponse:
         client = Anthropic()
         setattr(client, "_headers", {"anthropic-beta": "prompt-caching-2024-07-31"})
 
-        # Convert messages to Anthropic format with cache control
+        # Convert messages to Anthropic format with cache control and images
         anthropic_messages: List[MessageParam] = []
         for msg in messages:
-            if msg.content and msg.content[0]["text"]:
-                content = msg.content[0]["text"]
+            if msg.content:
+                message_content = []
+
+                # Only include images for the current (last) message
+                if msg.images and msg == messages[-1]:
+                    for img in msg.images:
+                        img_path = (
+                            get_images_dir(conv_id)
+                            / f"{img.id}{Path(img.filename).suffix}"
+                        )
+                        with open(img_path, "rb") as f:
+                            base64_data = base64.b64encode(f.read()).decode()
+                            message_content.append(
+                                {
+                                    "type": "image",
+                                    "source": {
+                                        "type": "base64",
+                                        "media_type": img.media_type,
+                                        "data": base64_data,
+                                    },
+                                }
+                            )
+
+                # Add text content
+                message_content.extend(msg.content)
+
                 message_dict: MessageParam = {
                     "role": "user" if msg.role == "user" else "assistant",
-                    "content": content,
+                    "content": message_content,
                 }
                 anthropic_messages.append(message_dict)
 
@@ -275,7 +417,7 @@ async def add_message(conv_id: str, message: Message) -> StreamingResponse:
 
                         # Construct message event
                         event["message"] = {
-                            "id": assistant_message_id or str(uuid.uuid4()),
+                            "id": user_message.assistant_message_id,
                             "role": "assistant",
                             "usage": usage_data.model_dump() if usage_data else None,
                         }
@@ -312,7 +454,7 @@ async def add_message(conv_id: str, message: Message) -> StreamingResponse:
                 # Save the complete response atomically
                 if not assistant_message_saved:
                     assistant_message = Message(
-                        id=assistant_message_id or str(uuid.uuid4()),
+                        id=user_message.assistant_message_id,
                         role="assistant",
                         content=[{"type": "text", "text": response_text}],
                         usage=usage_data,
@@ -441,3 +583,21 @@ async def get_conversations_by_tag(tag: str) -> List[ConversationMetadata]:
 async def delete_conversation(conv_id: str) -> None:
     """Delete a conversation and all its contents."""
     rm_conversation(conv_id)
+
+
+@router.get("/{conv_id}/images/{image_id}")
+async def get_image(conv_id: str, image_id: str):
+    """Get an image by its ID."""
+    # Load messages to find the image metadata
+    messages = load_messages(conv_id)
+
+    # Find the message containing this image
+    for message in messages:
+        if message.images:
+            for image in message.images:
+                if image.id == image_id:
+                    image_path = get_images_dir(conv_id) / image.filename
+                    if image_path.exists():
+                        return FileResponse(image_path)
+
+    raise HTTPException(status_code=404, detail="Image not found")

@@ -1,7 +1,15 @@
 import { Message } from "@/api/models/Message";
+import { MessageImage } from "@/api/models/MessageImage";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { SmallInput, SmallTextarea } from "@/components/ui/small-inputs";
 import { Copy, Edit2, Pause, Play, Trash2 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
@@ -23,6 +31,7 @@ interface MessageProps {
     audioEnabled: boolean;
     voiceModel: string | null;
   };
+  conversationId: string;
 }
 
 export function MessageComponent({
@@ -32,14 +41,20 @@ export function MessageComponent({
   isCached = false,
   onCacheChange,
   conversationMetadata,
+  conversationId,
 }: MessageProps) {
   const [isEditing, setIsEditing] = useState(false);
   const [editedContent, setEditedContent] = useState<MessageContent[]>(
     message.content as MessageContent[]
   );
   const [isPlaying, setIsPlaying] = useState(false);
+  const [selectedImageId, setSelectedImageId] = useState<string | null>(null);
   const audioContextRef = useRef<AudioContext | null>(null);
   const sourceNodeRef = useRef<AudioBufferSourceNode | null>(null);
+
+  const getImageUrl = (image: MessageImage) => {
+    return `/api/conversations/${conversationId}/images/${image.id}`;
+  };
 
   const isSystemPrompt = message.role === "system";
 
@@ -180,155 +195,200 @@ export function MessageComponent({
   };
 
   return (
-    <Card className={`mb-4 ${isSystemPrompt ? "border-blue-500" : ""}`}>
-      <CardHeader className="flex flex-row items-center justify-between py-0.5 px-1">
-        <div className="flex items-center gap-2">
-          <span className="text-3xs font-medium capitalize text-muted-foreground/70">
-            {message.role}
-          </span>
-        </div>
-        <div className="flex items-center gap-1">
-          {shouldDisplayPlayButton && (
+    <>
+      <Card className={`mb-4 ${isSystemPrompt ? "border-blue-500" : ""}`}>
+        <CardHeader className="flex flex-row items-center justify-between py-0.5 px-1">
+          <div className="flex items-center gap-2">
+            <span className="text-3xs font-medium capitalize text-muted-foreground/70">
+              {message.role}
+            </span>
+          </div>
+          <div className="flex items-center gap-1">
+            {shouldDisplayPlayButton && (
+              <Button
+                variant="ghost"
+                className="h-4 w-4 p-0 hover:bg-transparent"
+                onClick={handlePlayStop}
+              >
+                <div className="scale-50 transform">
+                  {isPlaying ? (
+                    <Pause size={16} strokeWidth={1} />
+                  ) : (
+                    <Play size={16} strokeWidth={1} />
+                  )}
+                </div>
+              </Button>
+            )}
+            <div className="flex items-center gap-2 scale-50 transform">
+              <Checkbox
+                id={`cache-${message.id}`}
+                checked={isCached}
+                onCheckedChange={(checked) => {
+                  if (typeof checked === "boolean") {
+                    handleCacheChange(checked);
+                  }
+                }}
+                className="h-3 w-3"
+              />
+              <label
+                htmlFor={`cache-${message.id}`}
+                className="text-2xs font-medium text-muted-foreground/70 cursor-pointer select-none"
+              >
+                Cache
+              </label>
+            </div>
             <Button
               variant="ghost"
               className="h-4 w-4 p-0 hover:bg-transparent"
-              onClick={handlePlayStop}
+              onClick={handleEdit}
             >
               <div className="scale-50 transform">
-                {isPlaying ? (
-                  <Pause size={16} strokeWidth={1} />
-                ) : (
-                  <Play size={16} strokeWidth={1} />
-                )}
+                <Edit2 size={16} strokeWidth={1} />
               </div>
             </Button>
-          )}
-          <div className="flex items-center gap-2 scale-50 transform">
-            <Checkbox
-              id={`cache-${message.id}`}
-              checked={isCached}
-              onCheckedChange={(checked) => {
-                if (typeof checked === "boolean") {
-                  handleCacheChange(checked);
-                }
-              }}
-              className="h-3 w-3"
-            />
-            <label
-              htmlFor={`cache-${message.id}`}
-              className="text-2xs font-medium text-muted-foreground/70 cursor-pointer select-none"
+            <Button
+              variant="ghost"
+              className="h-4 w-4 p-0 hover:bg-transparent"
+              onClick={handleCopy}
             >
-              Cache
-            </label>
+              <div className="scale-50 transform">
+                <Copy size={16} strokeWidth={1} />
+              </div>
+            </Button>
+            <Button
+              variant="ghost"
+              className="h-4 w-4 p-0 hover:bg-transparent"
+              onClick={handleDelete}
+            >
+              <div className="scale-50 transform">
+                <Trash2 size={16} strokeWidth={1} />
+              </div>
+            </Button>
           </div>
-          <Button
-            variant="ghost"
-            className="h-4 w-4 p-0 hover:bg-transparent"
-            onClick={handleEdit}
-          >
-            <div className="scale-50 transform">
-              <Edit2 size={16} strokeWidth={1} />
-            </div>
-          </Button>
-          <Button
-            variant="ghost"
-            className="h-4 w-4 p-0 hover:bg-transparent"
-            onClick={handleCopy}
-          >
-            <div className="scale-50 transform">
-              <Copy size={16} strokeWidth={1} />
-            </div>
-          </Button>
-          <Button
-            variant="ghost"
-            className="h-4 w-4 p-0 hover:bg-transparent"
-            onClick={handleDelete}
-          >
-            <div className="scale-50 transform">
-              <Trash2 size={16} strokeWidth={1} />
-            </div>
-          </Button>
-        </div>
-      </CardHeader>
-      <CardContent className="p-2">
-        {isEditing ? (
-          <div className="space-y-4">
-            {isSystemPrompt ? (
-              <>
-                <SmallInput
-                  placeholder="System Prompt Name"
-                  value={(editedContent[0] as MessageContent).text}
-                  onChange={(e) =>
-                    setEditedContent([
-                      { type: "text", text: e.target.value },
-                      editedContent[1],
-                    ])
-                  }
-                />
+        </CardHeader>
+        <CardContent className="p-2">
+          {isEditing ? (
+            <div className="space-y-4">
+              {isSystemPrompt ? (
+                <>
+                  <SmallInput
+                    placeholder="System Prompt Name"
+                    value={(editedContent[0] as MessageContent).text}
+                    onChange={(e) =>
+                      setEditedContent([
+                        { type: "text", text: e.target.value },
+                        editedContent[1],
+                      ])
+                    }
+                  />
+                  <SmallTextarea
+                    placeholder="System Prompt Content"
+                    value={(editedContent[1] as MessageContent).text}
+                    onChange={(e) =>
+                      setEditedContent([
+                        editedContent[0],
+                        { type: "text", text: e.target.value },
+                      ])
+                    }
+                    className="min-h-[100px]"
+                  />
+                </>
+              ) : (
                 <SmallTextarea
-                  placeholder="System Prompt Content"
-                  value={(editedContent[1] as MessageContent).text}
+                  value={editedContent
+                    .map((c) => (c as MessageContent).text)
+                    .join("\n")}
                   onChange={(e) =>
-                    setEditedContent([
-                      editedContent[0],
-                      { type: "text", text: e.target.value },
-                    ])
+                    setEditedContent([{ type: "text", text: e.target.value }])
                   }
                   className="min-h-[100px]"
                 />
-              </>
-            ) : (
-              <SmallTextarea
-                value={editedContent
-                  .map((c) => (c as MessageContent).text)
-                  .join("\n")}
-                onChange={(e) =>
-                  setEditedContent([{ type: "text", text: e.target.value }])
-                }
-                className="min-h-[100px]"
-              />
-            )}
-            <div className="flex justify-end gap-2">
-              <Button variant="outline" onClick={handleCancel}>
-                Cancel
-              </Button>
-              <Button onClick={handleSave}>Save</Button>
-            </div>
-          </div>
-        ) : isSystemPrompt ? (
-          <div className="space-y-2">
-            <h3 className="font-medium text-2xs">
-              {(message.content[0] as MessageContent).text}
-            </h3>
-            <div className="overflow-hidden">
-              <MessageContentComponent
-                content={[message.content[1] as MessageContent]}
-              />
-            </div>
-          </div>
-        ) : (
-          <>
-            <div className="overflow-hidden">
-              <MessageContentComponent
-                content={message.content as MessageContent[]}
-              />
-            </div>
-            {message.role === "assistant" && message.usage && (
-              <div className="text-3xs text-muted-foreground/70 mt-2 flex gap-4">
-                <span>Input: {message.usage.input_tokens}</span>
-                <span>
-                  Cache Created:{" "}
-                  {message.usage.cache_creation_input_tokens ?? 0}
-                </span>
-                <span>
-                  Cache Read: {message.usage.cache_read_input_tokens ?? 0}
-                </span>
-                <span>Output: {message.usage.output_tokens}</span>
+              )}
+              <div className="flex justify-end gap-2">
+                <Button variant="outline" onClick={handleCancel}>
+                  Cancel
+                </Button>
+                <Button onClick={handleSave}>Save</Button>
               </div>
-            )}
-          </>
-        )}
-      </CardContent>
-    </Card>
+            </div>
+          ) : isSystemPrompt ? (
+            <div className="space-y-2">
+              <h3 className="font-medium text-2xs">
+                {(message.content[0] as MessageContent).text}
+              </h3>
+              <div className="overflow-hidden">
+                <MessageContentComponent
+                  content={[message.content[1] as MessageContent]}
+                />
+              </div>
+            </div>
+          ) : (
+            <>
+              <div className="overflow-hidden">
+                <MessageContentComponent
+                  content={message.content as MessageContent[]}
+                />
+              </div>
+              {message.images && message.images.length > 0 && (
+                <div className="flex flex-wrap gap-2 mt-2">
+                  {message.images.map((image) => (
+                    <div key={image.id} className="relative group">
+                      <img
+                        src={getImageUrl(image as MessageImage)}
+                        alt={image.filename}
+                        className="h-16 w-16 object-cover rounded cursor-pointer hover:opacity-90 transition-opacity"
+                        onClick={() => {
+                          setSelectedImageId(image.id);
+                        }}
+                      />
+                    </div>
+                  ))}
+                </div>
+              )}
+              {message.role === "assistant" && message.usage && (
+                <div className="text-3xs text-muted-foreground/70 mt-2 flex gap-4">
+                  <span>Input: {message.usage.input_tokens}</span>
+                  <span>
+                    Cache Created:{" "}
+                    {message.usage.cache_creation_input_tokens ?? 0}
+                  </span>
+                  <span>
+                    Cache Read: {message.usage.cache_read_input_tokens ?? 0}
+                  </span>
+                  <span>Output: {message.usage.output_tokens}</span>
+                </div>
+              )}
+            </>
+          )}
+        </CardContent>
+      </Card>
+
+      <Dialog
+        open={selectedImageId !== null}
+        onOpenChange={() => setSelectedImageId(null)}
+      >
+        <DialogContent className="max-w-screen-lg w-fit">
+          <DialogHeader>
+            <DialogTitle className="sr-only">
+              Image from {message.role}
+            </DialogTitle>
+            <DialogDescription className="sr-only">
+              {selectedImageId}
+            </DialogDescription>
+          </DialogHeader>
+          {selectedImageId && message.images && (
+            <img
+              src={getImageUrl(
+                message.images.find(
+                  (img) => img.id === selectedImageId
+                ) as MessageImage
+              )}
+              alt="Full size image"
+              className="max-h-[80vh] w-auto"
+            />
+          )}
+        </DialogContent>
+      </Dialog>
+    </>
   );
 }
