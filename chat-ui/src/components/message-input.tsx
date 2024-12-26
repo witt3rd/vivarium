@@ -28,7 +28,11 @@ export interface MessageInputHandle {
 }
 
 interface MessageInputProps {
-  onSend: (message: string, files?: File[]) => void;
+  onSend: (
+    message: string,
+    targetPersonaId: string | null,
+    files?: File[]
+  ) => void;
   isPreCached: boolean;
   onPreCacheChange: (cached: boolean) => void;
   loading?: boolean;
@@ -72,12 +76,13 @@ export const MessageInput = forwardRef<MessageInputHandle, MessageInputProps>(
           if (message && !loading) {
             onSend(
               message,
+              selectedPersona?.id || null,
               attachedImages.length > 0 ? attachedImages : undefined
             );
           }
         }
       },
-      [onSend, loading, attachedImages]
+      [onSend, loading, attachedImages, selectedPersona]
     );
 
     const validateAndAddImage = useCallback(
@@ -252,9 +257,10 @@ export const MessageInput = forwardRef<MessageInputHandle, MessageInputProps>(
                 className="w-full h-7 text-2xs"
                 onClick={() => {
                   const message = textareaRef.current?.value.trim();
-                  if (message && !loading) {
+                  if (!loading && (message || selectedPersona)) {
                     onSend(
-                      message,
+                      message || "",
+                      selectedPersona?.id || null,
                       attachedImages.length > 0 ? attachedImages : undefined
                     );
                   }
@@ -263,7 +269,7 @@ export const MessageInput = forwardRef<MessageInputHandle, MessageInputProps>(
               >
                 <Send className="h-3 w-3 mr-1" />
                 Send{" "}
-                {selectedPersona ? `as ${selectedPersona.persona_name}` : ""}
+                {selectedPersona ? `to ${selectedPersona.persona_name}` : ""}
               </Button>
             </div>
           </div>

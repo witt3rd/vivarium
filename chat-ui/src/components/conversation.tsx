@@ -183,8 +183,12 @@ export function Conversation({
 
   // Memoized send handler
   const handleSend = useCallback(
-    async (messageText: string, files?: File[]) => {
-      if (!currentId || !messageText.trim()) return;
+    async (
+      messageText: string,
+      targetPersonaId: string | null,
+      files?: File[]
+    ) => {
+      if (!currentId || (!messageText.trim() && !targetPersonaId)) return;
 
       try {
         shouldAutoScroll.current = true;
@@ -211,24 +215,32 @@ export function Conversation({
         const messageData = {
           id: userMessageId,
           assistant_message_id: assistantMessageId,
-          content: [{ type: "text", text: messageText }],
+          content: messageText.trim()
+            ? [{ type: "text", text: messageText }]
+            : [],
           cache: isPreCached,
         };
 
-        // Add user message to UI immediately
-        const userMessage: Message = {
-          id: userMessageId,
-          role: "user",
-          content: [{ type: "text", text: messageText }],
-          timestamp: new Date().toISOString(),
-          cache: isPreCached,
-          images: imageMetadata?.map(({ id, filename, media_type }) => ({
-            id,
-            filename,
-            media_type,
-          })),
-        };
-        setMessages((prev) => [...prev, userMessage]);
+        // Create user message object if we have content
+        const userMessage: Message | null = messageText.trim()
+          ? {
+              id: userMessageId,
+              role: "user",
+              content: [{ type: "text", text: messageText }],
+              timestamp: new Date().toISOString(),
+              cache: isPreCached,
+              images: imageMetadata?.map(({ id, filename, media_type }) => ({
+                id,
+                filename,
+                media_type,
+              })),
+            }
+          : null;
+
+        // Add user message to UI immediately only if we have one
+        if (userMessage) {
+          setMessages((prev) => [...prev, userMessage]);
+        }
         setIsPreCached(false);
 
         // Create FormData and append message data and files
@@ -240,6 +252,9 @@ export function Conversation({
         );
         formData.append("content", JSON.stringify(messageData.content));
         formData.append("cache", messageData.cache.toString());
+        if (targetPersonaId) {
+          formData.append("target_persona", targetPersonaId);
+        }
 
         // Append files with their new filenames
         if (imageMetadata) {
@@ -261,8 +276,10 @@ export function Conversation({
         };
         setMessages((prev) => [...prev, assistantMessage]);
 
-        // Update metadata count for both messages atomically
-        const updatedCount = (currentMetadata?.message_count ?? 0) + 2;
+        // Update metadata count for actual number of messages added
+        const messageCountDelta = (messageText.trim() ? 1 : 0) + 1; // +1 for assistant message
+        const updatedCount =
+          (currentMetadata?.message_count ?? 0) + messageCountDelta;
         onConversationsChange(
           conversations.map((c) =>
             c.id === currentId && currentMetadata
@@ -284,11 +301,15 @@ export function Conversation({
         );
 
         if (!response.ok) {
-          // If the server request fails, remove the messages
+          // If the server request fails, remove only messages that were added
           setMessages((prev) =>
-            prev.filter(
-              (m) => m.id !== userMessageId && m.id !== assistantMessageId
-            )
+            prev.filter((m) => {
+              if (m.role === "assistant" && m.id === assistantMessageId)
+                return false;
+              if (userMessage && m.role === "user" && m.id === userMessageId)
+                return false;
+              return true;
+            })
           );
           onConversationsChange(
             conversations.map((c) =>
@@ -328,18 +349,22 @@ export function Conversation({
 
                 switch (event.type) {
                   case "message_start":
-                    if (event.message.role === "user") {
-                      setMessages((prev) => {
-                        const newMessages = [...prev];
-                        const userMessageIndex = newMessages.findIndex(
-                          (msg) =>
-                            msg.role === "user" && msg.id === userMessage.id
-                        );
-                        if (userMessageIndex !== -1) {
-                          newMessages[userMessageIndex] = event.message;
-                        }
-                        return newMessages;
-                      });
+                    if (event.message.role === "user" && userMessage) {
+                      //   setMessages((prev) => {
+                      //     const newMessages = [...prev];
+                      //     const userMessageIndex = newMessages.findIndex(
+                      //       (msg) =>
+                      //         msg.role === "user" && msg.id === userMessage.id
+                      //     );
+                      //     if (userMessageIndex !== -1) {
+                      //       newMessages[userMessageIndex] = event.message;
+                      //     }
+                      //     return newMessages;
+                      //   });
+                      console.error(
+                        "UNEXPECTED USER MESSAGE EVENT:",
+                        event.message
+                      );
                     } else {
                       setMessages((prev) => {
                         const newMessages = [...prev];
@@ -1382,9 +1407,9 @@ export function Conversation({
 
             <MessageInput
               ref={messageInputRef}
-              onSend={async (newMessage, files) => {
+              onSend={async (newMessage, targetPersonaId, files) => {
                 try {
-                  await handleSend(newMessage, files);
+                  await handleSend(newMessage, targetPersonaId, files);
                   messageInputRef.current?.clear();
                 } catch (error) {
                   // Don't clear the input if sending failed

@@ -124,9 +124,7 @@ async def update_metadata(conv_id: str, update: MetadataUpdate) -> ConversationM
     metadata.model = update.model or metadata.model
     metadata.max_tokens = update.max_tokens or metadata.max_tokens
     metadata.tags = update.tags
-    metadata.audio_enabled = (
-        update.audio_enabled if update.audio_enabled is not None else False
-    )
+    metadata.audio_enabled = update.audio_enabled or False
     metadata.voice_id = update.voice_id
     metadata.persona_name = update.persona_name
     metadata.user_name = update.user_name
@@ -226,6 +224,7 @@ async def add_message(
     assistant_message_id: Annotated[str, Form()],
     content: Annotated[str, Form()],
     cache: Annotated[str, Form()],
+    target_persona: Annotated[str | None, Form()] = None,
     files: List[UploadFile] = File(default=[]),
 ) -> StreamingResponse:
     """Add a message and get Claude's streaming response."""
@@ -238,6 +237,18 @@ async def add_message(
     try:
         # Parse content from JSON string
         content_list = cast(List[Dict[str, Any]], json.loads(content))
+
+        # If we have a target_persona and no content, create a test message
+        if target_persona:
+            if not content_list:
+                content_list = [
+                    {"type": "text", "text": f"This is a message to {target_persona}"}
+                ]
+            else:
+                content_list[0]["text"] = (
+                    f"This is a message to {target_persona}: {content_list[0]['text']}"
+                )
+        print(f"[DEBUG] content_list: {content_list}")
 
         # Convert cache string to bool
         cache_bool = cache.lower() == "true"
@@ -293,11 +304,9 @@ async def add_message(
                 save_path = get_images_dir(conv_id) / filename
 
                 try:
-                    content = await file.read()
-                    if isinstance(content, str):
-                        content = content.encode("utf-8")
+                    file_content: bytes = await file.read()
                     with open(save_path, "wb") as f:
-                        f.write(content)
+                        f.write(file_content)
 
                     message_images.append(
                         MessageImage(

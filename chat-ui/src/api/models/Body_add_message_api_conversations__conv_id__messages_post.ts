@@ -7,6 +7,7 @@ export type Body_add_message_api_conversations__conv_id__messages_post = {
     assistant_message_id: string;
     content: string;
     cache: string;
+    target_persona?: (string | null);
     files?: Array<Blob>;
 };
 
