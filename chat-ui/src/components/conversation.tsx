@@ -829,20 +829,14 @@ export function Conversation({
     }
   }, [audioEnabled, fetchVoices]);
 
-  // Initialize state when conversation changes
-  useEffect(() => {
-    if (currentConversation) {
-      setAudioEnabled(currentConversation.audio_enabled ?? false);
-      setSelectedVoiceId(currentConversation.voice_id ?? null);
-    }
-  }, [currentConversation]);
-
-  // Add effect to initialize persona state from metadata
+  // Add this consolidated effect:
   useEffect(() => {
     if (currentMetadata) {
+      setAudioEnabled(currentMetadata.audio_enabled ?? false);
+      setSelectedVoiceId(currentMetadata.voice_id ?? null);
       setIsPersona(currentMetadata.is_persona ?? false);
     }
-  }, [currentId]); // Only run when conversation ID changes
+  }, [currentMetadata]);
 
   // Add handler for persona toggle
   const handlePersonaToggle = async (checked: boolean) => {
