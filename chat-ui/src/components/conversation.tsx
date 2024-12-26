@@ -427,16 +427,22 @@ export function Conversation({
   // Add a debounced scroll handler
   useEffect(() => {
     let timeoutId: NodeJS.Timeout;
-    const observer = new ResizeObserver((entries) => {
+    const observer = new ResizeObserver((_entries) => {
       // Clear any existing timeout
       if (timeoutId) clearTimeout(timeoutId);
 
       // If we should auto scroll, set a new timeout
       if (shouldAutoScroll.current) {
         timeoutId = setTimeout(() => {
-          messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-          shouldAutoScroll.current = false;
-        }, 100); // Wait 100ms after last resize
+          const containerHeight =
+            messagesEndRef.current?.parentElement?.scrollHeight ?? 0;
+
+          // Only scroll and reset flag if we have actual content
+          if (containerHeight > 0) {
+            messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+            shouldAutoScroll.current = false;
+          }
+        }, 100);
       }
     });
 
@@ -464,8 +470,7 @@ export function Conversation({
   useEffect(() => {
     if (!currentId) return;
 
-    shouldAutoScroll.current = true;
-
+    // Messages are already cleared in handleConversationChange
     ConversationsService.getMessagesApiConversationsConvIdMessagesGet(currentId)
       .then(async (messages) => {
         if (currentMetadata?.system_prompt_id) {
@@ -890,6 +895,17 @@ export function Conversation({
     }
   };
 
+  // Add new handler for conversation changes
+  const handleConversationChange = useCallback(
+    (newId: string) => {
+      // SEQUENCING IS IMPORTANT HERE
+      shouldAutoScroll.current = true;
+      setMessages([]);
+      setCurrentId(newId);
+    },
+    [currentId]
+  );
+
   return (
     <Card
       className={`h-full flex flex-col ${
@@ -903,7 +919,7 @@ export function Conversation({
           className="border-r shadow-lg"
           conversations={conversations}
           selectedId={currentId}
-          onSelect={setCurrentId}
+          onConversationChange={handleConversationChange}
           onDelete={handleDelete}
           onNew={handleNewConversation}
           isCollapsed={isHistoryCollapsed}

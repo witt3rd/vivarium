@@ -18,7 +18,7 @@ import { Button } from "./ui/button";
 interface ConversationHistoryProps {
   conversations: ConversationMetadata[];
   selectedId: string | null;
-  onSelect: (id: string) => void;
+  onConversationChange: (id: string) => void;
   onDelete: (id: string) => void;
   onNew: () => void;
   disableNew?: boolean;
@@ -30,7 +30,7 @@ interface ConversationHistoryProps {
 export function ConversationHistory({
   conversations,
   selectedId,
-  onSelect,
+  onConversationChange,
   onDelete,
   onNew,
   disableNew = false,
@@ -50,7 +50,7 @@ export function ConversationHistory({
 
   const handleSelect = (conv: ConversationMetadata) => {
     if (conv.id) {
-      onSelect(conv.id);
+      onConversationChange(conv.id);
     }
   };
 
