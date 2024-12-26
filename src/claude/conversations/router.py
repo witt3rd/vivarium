@@ -14,7 +14,6 @@ from typing import (
     TypeVar,
     cast,
 )
-from uuid import uuid4
 
 from anthropic import Anthropic
 from anthropic.types import MessageParam
@@ -125,7 +124,9 @@ async def update_metadata(conv_id: str, update: MetadataUpdate) -> ConversationM
     metadata.model = update.model or metadata.model
     metadata.max_tokens = update.max_tokens or metadata.max_tokens
     metadata.tags = update.tags
-    metadata.audio_enabled = update.audio_enabled
+    metadata.audio_enabled = (
+        update.audio_enabled if update.audio_enabled is not None else False
+    )
     metadata.voice_id = update.voice_id
     metadata.persona_name = update.persona_name
     metadata.user_name = update.user_name
@@ -642,7 +643,11 @@ async def create_system_prompt_from_transcript(
 
     # Create new system prompt
     system_prompt = SystemPrompt(
-        id=str(uuid4()), name=name, content=transcript, is_cached=False
+        id=conv_id,  # Use conversation ID as the system prompt ID to override any existing prompt
+        name=name,
+        content=transcript,
+        description="Generated from conversation transcript",
+        is_cached=False,
     )
 
     # Save the system prompt

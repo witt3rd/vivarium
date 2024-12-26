@@ -4,6 +4,7 @@ import { ConversationMetadata } from "@/api/models/ConversationMetadata";
 import { ConversationsService } from "@/api/services/ConversationsService";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { Button } from "@/components/ui/button";
+import { Toaster } from "@/components/ui/toaster";
 import {
   DndContext,
   DragEndEvent,
@@ -88,6 +89,7 @@ export default function App() {
 
   return (
     <div className="h-screen flex flex-col bg-background">
+      <Toaster />
       <div className="flex-none flex justify-between items-center p-2">
         <h1 className="text-l font-semibold">Claude Chat</h1>
         <div className="flex items-center gap-2">

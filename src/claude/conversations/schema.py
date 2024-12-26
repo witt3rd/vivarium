@@ -73,7 +73,7 @@ class MetadataUpdate(BaseModel):
     model: Optional[str] = None
     max_tokens: Optional[int] = None
     tags: List[str] = Field(default_factory=list)
-    audio_enabled: Optional[bool] = None
+    audio_enabled: bool = False
     voice_id: Optional[str] = None
     persona_name: Optional[str] = (
         None  # Name to use for assistant in transcripts, None for default

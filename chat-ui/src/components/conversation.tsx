@@ -18,6 +18,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { useToast } from "@/hooks/use-toast";
 import { sortConversations } from "@/lib/conversation-sort";
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
@@ -26,6 +27,7 @@ import {
   ChevronsUp,
   Download,
   Edit2,
+  FileText,
   GitBranch,
   GripVertical,
   Plus,
@@ -953,6 +955,32 @@ export function Conversation({
     };
   }, []);
 
+  const { toast } = useToast();
+
+  const handleCreateSystemPromptFromTranscript = async () => {
+    if (!currentId || !currentMetadata?.name) return;
+    try {
+      const newPrompt =
+        await ConversationsService.createSystemPromptFromTranscriptApiConversationsConvIdSystemPromptFromTranscriptPost(
+          currentId,
+          currentMetadata.name,
+          currentMetadata.persona_name || undefined,
+          currentMetadata.user_name || undefined
+        );
+      // Replace the system prompt if it exists, otherwise add it
+      setSystemPrompts((prev) =>
+        prev.filter((p) => p.id !== newPrompt.id).concat(newPrompt)
+      );
+      toast({
+        title: "System Prompt Created",
+        description: `Created new system prompt "${newPrompt.name}" from conversation`,
+      });
+    } catch (error) {
+      console.error("Error creating system prompt from transcript:", error);
+      setError("Failed to create system prompt from transcript");
+    }
+  };
+
   return (
     <Card
       className={`h-full flex flex-col ${
@@ -1115,6 +1143,15 @@ export function Conversation({
                 className="h-5 w-5"
               >
                 <Plus className="text-muted-foreground scale-75 transform" />
+              </Button>
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={handleCreateSystemPromptFromTranscript}
+                className="h-5 w-5"
+                title="Create system prompt from conversation"
+              >
+                <FileText className="text-muted-foreground scale-75 transform" />
               </Button>
               <div className="flex items-center gap-2 scale-75 transform">
                 <label

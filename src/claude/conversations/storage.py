@@ -171,6 +171,19 @@ def load_metadata_index() -> List[ConversationMetadata]:
                 data = cast(
                     List[Dict[str, Any]], raw_data if isinstance(raw_data, list) else []
                 )
+                # Ensure default values for required fields
+                for item in data:
+                    # Convert null to False for audio_enabled
+                    if "audio_enabled" not in item or item["audio_enabled"] is None:
+                        item["audio_enabled"] = False
+                    if "model" not in item:
+                        item["model"] = "claude-3-5-sonnet-20241022"
+                    if "max_tokens" not in item:
+                        item["max_tokens"] = 8192
+                    if "message_count" not in item:
+                        item["message_count"] = 0
+                    if "tags" not in item:
+                        item["tags"] = []
                 result = [ConversationMetadata(**item) for item in data]
                 return result
         except FileNotFoundError:
