@@ -102,8 +102,21 @@ export function Conversation({
   // Add error state for fetching voices
   const [fetchError, setFetchError] = useState<boolean>(false);
 
-  // Add state for persona toggle
-  const [isPersona, setIsPersona] = useState<boolean>(false);
+  const currentMetadata = conversations.find((m) => m.id === currentId);
+
+  // Add state for persona name and user name input
+  const [localPersonaName, setLocalPersonaName] = useState<string>("");
+  const [localUserName, setLocalUserName] = useState<string>("");
+  const personaNameDebounceRef = useRef<NodeJS.Timeout>();
+  const userNameDebounceRef = useRef<NodeJS.Timeout>();
+
+  // Initialize local state when metadata changes
+  useEffect(() => {
+    if (currentMetadata) {
+      setLocalPersonaName(currentMetadata.persona_name ?? "");
+      setLocalUserName(currentMetadata.user_name ?? "");
+    }
+  }, [currentMetadata?.id]); // Only update when conversation changes
 
   const fetchVoices = useCallback(async () => {
     if (voices.length > 0 || loadingVoices || fetchError) return; // Use cached voices if available, if already loading, or if there's an error
@@ -146,8 +159,6 @@ export function Conversation({
       setLoadingVoices(false);
     }
   }, [voices, loadingVoices, fetchError]);
-
-  const currentMetadata = conversations.find((m) => m.id === currentId);
 
   // Initialize and handle conversation changes
   useEffect(() => {
@@ -427,7 +438,7 @@ export function Conversation({
   // Add a debounced scroll handler
   useEffect(() => {
     let timeoutId: NodeJS.Timeout;
-    const observer = new ResizeObserver((_entries) => {
+    const observer = new ResizeObserver(() => {
       // Clear any existing timeout
       if (timeoutId) clearTimeout(timeoutId);
 
@@ -515,7 +526,6 @@ export function Conversation({
       const createParams: MetadataCreate = {
         name: "New Conversation",
         id: crypto.randomUUID(),
-        is_persona: false,
       };
       const metadata =
         await ConversationsService.createMetadataApiConversationsPost(
@@ -533,18 +543,14 @@ export function Conversation({
   };
 
   const handleTitleEdit = async () => {
-    if (!currentId || !editedTitle.trim()) return;
-
+    if (!currentId || !editedTitle.trim() || !currentMetadata) return;
     try {
       const updated =
         await ConversationsService.updateMetadataApiConversationsConvIdMetadataPut(
           currentId,
           {
+            ...currentMetadata,
             name: editedTitle.trim(),
-            system_prompt_id: currentMetadata?.system_prompt_id ?? null,
-            model: currentMetadata?.model ?? "claude-3-5-sonnet-20241022",
-            max_tokens: currentMetadata?.max_tokens ?? 8192,
-            is_persona: currentMetadata?.is_persona ?? false,
           }
         );
       onConversationsChange(
@@ -558,18 +564,14 @@ export function Conversation({
   };
 
   const handleSystemPromptChange = async (promptId: string | null) => {
-    if (!currentId) return;
-
+    if (!currentId || !currentMetadata) return;
     try {
       const updated =
         await ConversationsService.updateMetadataApiConversationsConvIdMetadataPut(
           currentId,
           {
-            name: currentMetadata?.name ?? "New Conversation",
+            ...currentMetadata,
             system_prompt_id: promptId,
-            model: currentMetadata?.model ?? "claude-3-5-sonnet-20241022",
-            max_tokens: currentMetadata?.max_tokens ?? 8192,
-            is_persona: currentMetadata?.is_persona ?? false,
           }
         );
       onConversationsChange(
@@ -779,8 +781,10 @@ export function Conversation({
 
     try {
       const text =
-        await ConversationsService.getMarkdownApiConversationsConvIdMarkdownGet(
-          currentId
+        await ConversationsService.getTranscriptApiConversationsConvIdTranscriptGet(
+          currentId,
+          currentMetadata?.persona_name || "Assistant",
+          currentMetadata?.user_name || "User"
         );
 
       const blob = new Blob([text], { type: "text/markdown" });
@@ -859,41 +863,8 @@ export function Conversation({
     if (currentMetadata) {
       setAudioEnabled(currentMetadata.audio_enabled ?? false);
       setSelectedVoiceId(currentMetadata.voice_id ?? null);
-      setIsPersona(currentMetadata.is_persona ?? false);
     }
   }, [currentMetadata]);
-
-  // Add handler for persona toggle
-  const handlePersonaToggle = async (checked: boolean) => {
-    if (!currentId || !currentMetadata) return;
-
-    try {
-      const updatePayload = {
-        name: currentMetadata.name,
-        system_prompt_id: currentMetadata.system_prompt_id,
-        model: currentMetadata.model,
-        max_tokens: currentMetadata.max_tokens,
-        audio_enabled: currentMetadata.audio_enabled,
-        voice_id: currentMetadata.voice_id,
-        is_persona: checked,
-      };
-
-      const updated =
-        await ConversationsService.updateMetadataApiConversationsConvIdMetadataPut(
-          currentId,
-          updatePayload
-        );
-
-      onConversationsChange(
-        conversations.map((c) => (c.id === currentId ? updated : c))
-      );
-      setIsPersona(checked);
-    } catch (error) {
-      console.error("Error updating persona setting:", error);
-      setError("Failed to update persona setting");
-      setIsPersona(currentMetadata.is_persona ?? false);
-    }
-  };
 
   // Add new handler for conversation changes
   const handleConversationChange = useCallback(
@@ -905,6 +876,82 @@ export function Conversation({
     },
     [currentId]
   );
+
+  const handlePersonaNameChange = async (newName: string) => {
+    if (!currentId || !currentMetadata) return;
+
+    setLocalPersonaName(newName);
+
+    // Clear existing timeout
+    if (personaNameDebounceRef.current) {
+      clearTimeout(personaNameDebounceRef.current);
+    }
+
+    // Set new timeout
+    personaNameDebounceRef.current = setTimeout(async () => {
+      try {
+        const updated =
+          await ConversationsService.updateMetadataApiConversationsConvIdMetadataPut(
+            currentId,
+            {
+              ...currentMetadata,
+              persona_name: newName || null,
+            }
+          );
+
+        onConversationsChange(
+          conversations.map((c) => (c.id === currentId ? updated : c))
+        );
+      } catch (error) {
+        console.error("Error updating persona name:", error);
+        setError("Failed to update persona name");
+      }
+    }, 500); // 500ms debounce
+  };
+
+  const handleUserNameChange = async (newName: string) => {
+    if (!currentId || !currentMetadata) return;
+
+    setLocalUserName(newName);
+
+    // Clear existing timeout
+    if (userNameDebounceRef.current) {
+      clearTimeout(userNameDebounceRef.current);
+    }
+
+    // Set new timeout
+    userNameDebounceRef.current = setTimeout(async () => {
+      try {
+        const updated =
+          await ConversationsService.updateMetadataApiConversationsConvIdMetadataPut(
+            currentId,
+            {
+              ...currentMetadata,
+              user_name: newName || null,
+            }
+          );
+
+        onConversationsChange(
+          conversations.map((c) => (c.id === currentId ? updated : c))
+        );
+      } catch (error) {
+        console.error("Error updating user name:", error);
+        setError("Failed to update user name");
+      }
+    }, 500); // 500ms debounce
+  };
+
+  // Cleanup timeouts on unmount
+  useEffect(() => {
+    return () => {
+      if (personaNameDebounceRef.current) {
+        clearTimeout(personaNameDebounceRef.current);
+      }
+      if (userNameDebounceRef.current) {
+        clearTimeout(userNameDebounceRef.current);
+      }
+    };
+  }, []);
 
   return (
     <Card
@@ -1070,17 +1117,34 @@ export function Conversation({
                 <Plus className="text-muted-foreground scale-75 transform" />
               </Button>
               <div className="flex items-center gap-2 scale-75 transform">
-                <Checkbox
-                  id="is-persona"
-                  checked={isPersona}
-                  onCheckedChange={handlePersonaToggle}
-                />
                 <label
-                  htmlFor="is-persona"
+                  htmlFor="persona-name"
                   className="text-2xs font-medium text-muted-foreground/70 cursor-pointer select-none"
                 >
-                  Persona
+                  Persona Name
                 </label>
+                <Input
+                  id="persona-name"
+                  value={localPersonaName}
+                  onChange={(e) => handlePersonaNameChange(e.target.value)}
+                  placeholder="Assistant"
+                  className="h-5 text-2xs w-32"
+                />
+              </div>
+              <div className="flex items-center gap-2 scale-75 transform">
+                <label
+                  htmlFor="user-name"
+                  className="text-2xs font-medium text-muted-foreground/70 cursor-pointer select-none"
+                >
+                  User Name
+                </label>
+                <Input
+                  id="user-name"
+                  value={localUserName}
+                  onChange={(e) => handleUserNameChange(e.target.value)}
+                  placeholder="User"
+                  className="h-5 text-2xs w-32"
+                />
               </div>
               <div className="flex-1" />
               <div className="flex items-center gap-2 scale-75 transform">
@@ -1100,15 +1164,9 @@ export function Conversation({
                       setSelectedVoiceId(newVoiceId);
                     }
 
-                    if (currentId) {
+                    if (currentId && currentMetadata) {
                       const newMetadata = {
-                        name: currentMetadata?.name ?? "New Conversation",
-                        system_prompt_id:
-                          currentMetadata?.system_prompt_id ?? null,
-                        model:
-                          currentMetadata?.model ??
-                          "claude-3-5-sonnet-20241022",
-                        max_tokens: currentMetadata?.max_tokens ?? 8192,
+                        ...currentMetadata,
                         audio_enabled: isChecked,
                         voice_id: newVoiceId,
                       };
@@ -1151,15 +1209,9 @@ export function Conversation({
                 value={selectedVoiceId ?? voices[0]?.voice_id}
                 onValueChange={(value: string) => {
                   setSelectedVoiceId(value);
-                  if (currentId) {
+                  if (currentId && currentMetadata) {
                     const newMetadata = {
-                      name: currentMetadata?.name ?? "New Conversation",
-                      system_prompt_id:
-                        currentMetadata?.system_prompt_id ?? null,
-                      model:
-                        currentMetadata?.model ?? "claude-3-5-sonnet-20241022",
-                      max_tokens: currentMetadata?.max_tokens ?? 8192,
-                      audio_enabled: audioEnabled,
+                      ...currentMetadata,
                       voice_id: value,
                     };
                     ConversationsService.updateMetadataApiConversationsConvIdMetadataPut(

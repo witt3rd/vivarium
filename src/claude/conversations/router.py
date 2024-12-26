@@ -14,13 +14,15 @@ from typing import (
     TypeVar,
     cast,
 )
+from uuid import uuid4
 
 from anthropic import Anthropic
 from anthropic.types import MessageParam
-from fastapi import APIRouter, File, Form, HTTPException, UploadFile
+from fastapi import APIRouter, File, Form, HTTPException, Query, UploadFile
 from fastapi.responses import FileResponse, StreamingResponse
 
-from ..system_prompts.storage import load_prompt
+from ..system_prompts.schema import SystemPrompt
+from ..system_prompts.storage import load_prompt, save_prompt
 from .schema import (
     ConversationMetadata,
     Message,
@@ -117,20 +119,16 @@ async def update_metadata(conv_id: str, update: MetadataUpdate) -> ConversationM
     """Update conversation metadata."""
     metadata = load_metadata(conv_id)
 
-    # Update fields
+    # Update all fields directly from the update object
     metadata.name = update.name
     metadata.system_prompt_id = update.system_prompt_id
     metadata.model = update.model or metadata.model
     metadata.max_tokens = update.max_tokens or metadata.max_tokens
     metadata.tags = update.tags
-
-    # Update TTS fields if provided
-    if update.audio_enabled is not None:
-        metadata.audio_enabled = update.audio_enabled
-    if update.voice_id is not None:
-        metadata.voice_id = update.voice_id
-    if update.is_persona is not None:
-        metadata.is_persona = update.is_persona
+    metadata.audio_enabled = update.audio_enabled
+    metadata.voice_id = update.voice_id
+    metadata.persona_name = update.persona_name
+    metadata.user_name = update.user_name
 
     save_metadata(metadata)
     return metadata
@@ -488,14 +486,30 @@ async def add_message(
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.get("/{conv_id}/markdown")
-async def get_markdown(conv_id: str) -> str:
-    """Get messages in markdown format."""
+@router.get("/{conv_id}/transcript")
+async def get_transcript(
+    conv_id: str,
+    assistant_prefix: str | None = "Assistant",
+    user_prefix: str | None = "User",
+) -> str:
+    """Get messages in markdown format with configurable role prefixes.
+
+    Args:
+        conv_id: Conversation ID
+        assistant_prefix: Custom prefix for assistant messages, None to omit
+        user_prefix: Custom prefix for user messages, None to omit
+    """
     messages = load_messages(conv_id)
     lines: list[str] = []
 
     for message in messages:
-        role = message.role.capitalize()
+        # Get appropriate prefix based on role
+        prefix = None
+        if message.role == "assistant" and assistant_prefix:
+            prefix = assistant_prefix
+        elif message.role == "user" and user_prefix:
+            prefix = user_prefix
+
         content = "\n\n".join(
             str(block["text"])
             .replace("_", "\\_")
@@ -504,7 +518,12 @@ async def get_markdown(conv_id: str) -> str:
             for block in message.content
             if block["type"] == "text"
         )
-        lines.extend([f"**{role}**: {content}", ""])
+
+        # Format line based on whether prefix should be included
+        if prefix:
+            lines.extend([f"**{prefix}**: {content}", ""])
+        else:
+            lines.extend([content, ""])
 
     return "\n".join(lines)
 
@@ -597,3 +616,36 @@ async def get_image(conv_id: str, image_id: str):
         return FileResponse(file)
 
     raise HTTPException(status_code=404, detail="Image not found")
+
+
+@router.post("/{conv_id}/system-prompt-from-transcript", response_model=SystemPrompt)
+async def create_system_prompt_from_transcript(
+    conv_id: str,
+    name: Annotated[str, Query(description="Name for the new system prompt")],
+    assistant_prefix: Annotated[
+        str | None, Query(description="Custom prefix for assistant messages")
+    ] = "Assistant",
+    user_prefix: Annotated[
+        str | None, Query(description="Custom prefix for user messages")
+    ] = "User",
+) -> SystemPrompt:
+    """Create a new system prompt from conversation transcript.
+
+    Args:
+        conv_id: Source conversation ID
+        name: Name for the new system prompt
+        assistant_prefix: Custom prefix for assistant messages, None to omit
+        user_prefix: Custom prefix for user messages, None to omit
+    """
+    # Get transcript with specified prefixes
+    transcript = await get_transcript(conv_id, assistant_prefix, user_prefix)
+
+    # Create new system prompt
+    system_prompt = SystemPrompt(
+        id=str(uuid4()), name=name, content=transcript, is_cached=False
+    )
+
+    # Save the system prompt
+    save_prompt(system_prompt)
+
+    return system_prompt

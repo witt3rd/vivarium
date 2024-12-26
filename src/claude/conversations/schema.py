@@ -57,7 +57,12 @@ class ConversationMetadata(BaseModel):
     updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     audio_enabled: bool = False
     voice_id: Optional[str] = None
-    is_persona: bool = False
+    persona_name: Optional[str] = (
+        None  # Name to use for assistant in transcripts, None for default
+    )
+    user_name: Optional[str] = (
+        None  # Name to use for user in transcripts, None for default
+    )
 
 
 class MetadataUpdate(BaseModel):
@@ -70,7 +75,12 @@ class MetadataUpdate(BaseModel):
     tags: List[str] = Field(default_factory=list)
     audio_enabled: Optional[bool] = None
     voice_id: Optional[str] = None
-    is_persona: Optional[bool] = None
+    persona_name: Optional[str] = (
+        None  # Name to use for assistant in transcripts, None for default
+    )
+    user_name: Optional[str] = (
+        None  # Name to use for user in transcripts, None for default
+    )
 
 
 class MetadataCreate(BaseModel):
@@ -82,4 +92,9 @@ class MetadataCreate(BaseModel):
     model: Optional[str] = None
     max_tokens: Optional[int] = None
     tags: List[str] = Field(default_factory=list)
-    is_persona: bool = False
+    persona_name: Optional[str] = (
+        None  # Name to use for assistant in transcripts, None for default
+    )
+    user_name: Optional[str] = (
+        None  # Name to use for user in transcripts, None for default
+    )

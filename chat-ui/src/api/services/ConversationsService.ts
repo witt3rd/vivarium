@@ -7,6 +7,7 @@ import type { ConversationMetadata } from '../models/ConversationMetadata';
 import type { Message } from '../models/Message';
 import type { MetadataCreate } from '../models/MetadataCreate';
 import type { MetadataUpdate } from '../models/MetadataUpdate';
+import type { SystemPrompt } from '../models/SystemPrompt';
 import type { CancelablePromise } from '../core/CancelablePromise';
 import { OpenAPI } from '../core/OpenAPI';
 import { request as __request } from '../core/request';
@@ -212,20 +213,33 @@ export class ConversationsService {
         });
     }
     /**
-     * Get Markdown
-     * Get messages in markdown format.
+     * Get Transcript
+     * Get messages in markdown format with configurable role prefixes.
+     *
+     * Args:
+     * conv_id: Conversation ID
+     * assistant_prefix: Custom prefix for assistant messages, None to omit
+     * user_prefix: Custom prefix for user messages, None to omit
      * @param convId
+     * @param assistantPrefix
+     * @param userPrefix
      * @returns string Successful Response
      * @throws ApiError
      */
-    public static getMarkdownApiConversationsConvIdMarkdownGet(
+    public static getTranscriptApiConversationsConvIdTranscriptGet(
         convId: string,
+        assistantPrefix?: (string | null),
+        userPrefix?: (string | null),
     ): CancelablePromise<string> {
         return __request(OpenAPI, {
             method: 'GET',
-            url: '/api/conversations/{conv_id}/markdown',
+            url: '/api/conversations/{conv_id}/transcript',
             path: {
                 'conv_id': convId,
+            },
+            query: {
+                'assistant_prefix': assistantPrefix,
+                'user_prefix': userPrefix,
             },
             errors: {
                 422: `Validation Error`,
@@ -373,6 +387,44 @@ export class ConversationsService {
             path: {
                 'conv_id': convId,
                 'image_id': imageId,
+            },
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Create System Prompt From Transcript
+     * Create a new system prompt from conversation transcript.
+     *
+     * Args:
+     * conv_id: Source conversation ID
+     * name: Name for the new system prompt
+     * assistant_prefix: Custom prefix for assistant messages, None to omit
+     * user_prefix: Custom prefix for user messages, None to omit
+     * @param convId
+     * @param name Name for the new system prompt
+     * @param assistantPrefix Custom prefix for assistant messages
+     * @param userPrefix Custom prefix for user messages
+     * @returns SystemPrompt Successful Response
+     * @throws ApiError
+     */
+    public static createSystemPromptFromTranscriptApiConversationsConvIdSystemPromptFromTranscriptPost(
+        convId: string,
+        name: string,
+        assistantPrefix?: (string | null),
+        userPrefix?: (string | null),
+    ): CancelablePromise<SystemPrompt> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/api/conversations/{conv_id}/system-prompt-from-transcript',
+            path: {
+                'conv_id': convId,
+            },
+            query: {
+                'name': name,
+                'assistant_prefix': assistantPrefix,
+                'user_prefix': userPrefix,
             },
             errors: {
                 422: `Validation Error`,

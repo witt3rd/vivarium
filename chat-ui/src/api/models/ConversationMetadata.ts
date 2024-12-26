@@ -17,6 +17,7 @@ export type ConversationMetadata = {
     updated_at?: string;
     audio_enabled?: boolean;
     voice_id?: (string | null);
-    is_persona?: boolean;
+    persona_name?: (string | null);
+    user_name?: (string | null);
 };
 

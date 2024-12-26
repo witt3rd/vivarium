@@ -12,6 +12,7 @@ export type MetadataCreate = {
     model?: (string | null);
     max_tokens?: (number | null);
     tags?: Array<string>;
-    is_persona?: boolean;
+    persona_name?: (string | null);
+    user_name?: (string | null);
 };
 
