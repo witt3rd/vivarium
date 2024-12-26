@@ -424,13 +424,32 @@ export function Conversation({
     localStorage.setItem("historyCollapsed", isHistoryCollapsed.toString());
   }, [isHistoryCollapsed]);
 
-  // Scroll to bottom when messages change, but only when shouldAutoScroll is true
+  // Add a debounced scroll handler
   useEffect(() => {
-    if (shouldAutoScroll.current) {
-      messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-      shouldAutoScroll.current = false;
+    let timeoutId: NodeJS.Timeout;
+    const observer = new ResizeObserver((entries) => {
+      // Clear any existing timeout
+      if (timeoutId) clearTimeout(timeoutId);
+
+      // If we should auto scroll, set a new timeout
+      if (shouldAutoScroll.current) {
+        timeoutId = setTimeout(() => {
+          messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+          shouldAutoScroll.current = false;
+        }, 100); // Wait 100ms after last resize
+      }
+    });
+
+    const messageContainer = messagesEndRef.current?.parentElement;
+    if (messageContainer) {
+      observer.observe(messageContainer);
     }
-  }, [messages]);
+
+    return () => {
+      observer.disconnect();
+      if (timeoutId) clearTimeout(timeoutId);
+    };
+  }, [messages.length]);
 
   // Load system prompts
   useEffect(() => {
@@ -445,7 +464,8 @@ export function Conversation({
   useEffect(() => {
     if (!currentId) return;
 
-    shouldAutoScroll.current = true; // Set flag before loading messages
+    shouldAutoScroll.current = true;
+
     ConversationsService.getMessagesApiConversationsConvIdMessagesGet(currentId)
       .then(async (messages) => {
         if (currentMetadata?.system_prompt_id) {
@@ -842,10 +862,6 @@ export function Conversation({
   const handlePersonaToggle = async (checked: boolean) => {
     if (!currentId || !currentMetadata) return;
 
-    console.log("handlePersonaToggle called with:", { checked, currentId });
-    console.log("Current metadata before update:", currentMetadata);
-    console.log("Current isPersona state:", isPersona);
-
     try {
       const updatePayload = {
         name: currentMetadata.name,
@@ -857,28 +873,19 @@ export function Conversation({
         is_persona: checked,
       };
 
-      console.log("Sending API request with payload:", updatePayload);
       const updated =
         await ConversationsService.updateMetadataApiConversationsConvIdMetadataPut(
           currentId,
           updatePayload
         );
-      console.log("API response:", updated);
-      console.log("API response is_persona value:", updated.is_persona);
-      console.log("Updating conversations with new metadata");
 
       onConversationsChange(
         conversations.map((c) => (c.id === currentId ? updated : c))
       );
-      console.log("Setting isPersona state to:", checked);
       setIsPersona(checked);
     } catch (error) {
       console.error("Error updating persona setting:", error);
       setError("Failed to update persona setting");
-      console.log(
-        "Reverting isPersona state to:",
-        currentMetadata.is_persona ?? false
-      );
       setIsPersona(currentMetadata.is_persona ?? false);
     }
   };
