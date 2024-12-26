@@ -1395,6 +1395,7 @@ export function Conversation({
               isPreCached={isPreCached}
               onPreCacheChange={setIsPreCached}
               loading={loading}
+              conversations={conversations}
             />
           </CardContent>
         </div>

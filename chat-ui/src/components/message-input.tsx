@@ -1,8 +1,18 @@
+import { ConversationMetadata } from "@/api/models/ConversationMetadata";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from "@/components/ui/command";
+import { ScrollArea } from "@/components/ui/scroll-area";
 import { SmallTextarea } from "@/components/ui/small-inputs";
-import { Image, X } from "lucide-react";
+import { Image, Send, X } from "lucide-react";
 import {
   forwardRef,
   useCallback,
@@ -22,16 +32,19 @@ interface MessageInputProps {
   isPreCached: boolean;
   onPreCacheChange: (cached: boolean) => void;
   loading?: boolean;
+  conversations: ConversationMetadata[];
 }
 
 export const MessageInput = forwardRef<MessageInputHandle, MessageInputProps>(
   function MessageInput(
-    { onSend, isPreCached, onPreCacheChange, loading = false },
+    { onSend, isPreCached, onPreCacheChange, loading = false, conversations },
     ref
   ) {
     const textareaRef = useRef<HTMLTextAreaElement>(null);
     const fileInputRef = useRef<HTMLInputElement>(null);
     const [attachedImages, setAttachedImages] = useState<File[]>([]);
+    const [selectedPersona, setSelectedPersona] =
+      useState<ConversationMetadata | null>(null);
 
     // Keep focus on the textarea
     useEffect(() => {
@@ -164,37 +177,96 @@ export const MessageInput = forwardRef<MessageInputHandle, MessageInputProps>(
             multiple
             onChange={handleImageSelect}
           />
-          <SmallTextarea
-            ref={textareaRef}
-            className="resize-none"
-            placeholder="Type your message here... (Press Enter to send, Shift+Enter for new line)"
-            rows={3}
-            onKeyDown={handleKeyDown}
-            onPaste={handlePaste}
-            disabled={loading}
-            autoFocus
-          />
-          {attachedImages.length > 0 && (
-            <div className="flex flex-wrap gap-2">
-              {attachedImages.map((file, index) => (
-                <div key={index} className="relative group">
-                  <img
-                    src={URL.createObjectURL(file)}
-                    alt={file.name}
-                    className="h-16 w-16 object-cover rounded"
-                  />
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="absolute -top-1 -right-1 h-4 w-4 p-0 bg-background/80 hover:bg-background rounded-full"
-                    onClick={() => removeImage(index)}
-                  >
-                    <X className="h-3 w-3" />
-                  </Button>
+          <div className="flex gap-2">
+            <div className="flex-1 flex flex-col">
+              <SmallTextarea
+                ref={textareaRef}
+                className="resize-none flex-1 min-h-[120px]"
+                placeholder="Type your message here... (Press Enter to send, Shift+Enter for new line)"
+                rows={3}
+                onKeyDown={handleKeyDown}
+                onPaste={handlePaste}
+                disabled={loading}
+                autoFocus
+              />
+              {attachedImages.length > 0 && (
+                <div className="flex flex-wrap gap-2 mt-2">
+                  {attachedImages.map((file, index) => (
+                    <div key={index} className="relative group">
+                      <img
+                        src={URL.createObjectURL(file)}
+                        alt={file.name}
+                        className="h-16 w-16 object-cover rounded"
+                      />
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="absolute -top-1 -right-1 h-4 w-4 p-0 bg-background/80 hover:bg-background rounded-full"
+                        onClick={() => removeImage(index)}
+                      >
+                        <X className="h-3 w-3" />
+                      </Button>
+                    </div>
+                  ))}
                 </div>
-              ))}
+              )}
             </div>
-          )}
+            <div className="w-64 flex flex-col gap-2">
+              <Command className="rounded-lg border shadow-md">
+                <CommandInput
+                  placeholder="Search personas..."
+                  className="h-7 text-2xs"
+                />
+                <CommandList>
+                  <ScrollArea className="h-[80px]">
+                    <CommandEmpty>No personas found.</CommandEmpty>
+                    <CommandGroup>
+                      <CommandItem
+                        onSelect={() => setSelectedPersona(null)}
+                        className="text-2xs cursor-pointer"
+                      >
+                        None (Send as User)
+                      </CommandItem>
+                      {conversations
+                        .filter((conv) => conv.persona_name)
+                        .sort((a, b) =>
+                          (a.persona_name || "").localeCompare(
+                            b.persona_name || ""
+                          )
+                        )
+                        .map((conv) => (
+                          <CommandItem
+                            key={conv.id}
+                            onSelect={() => setSelectedPersona(conv)}
+                            className="text-2xs cursor-pointer"
+                          >
+                            {conv.persona_name}
+                          </CommandItem>
+                        ))}
+                    </CommandGroup>
+                  </ScrollArea>
+                </CommandList>
+              </Command>
+              <Button
+                size="sm"
+                className="w-full h-7 text-2xs"
+                onClick={() => {
+                  const message = textareaRef.current?.value.trim();
+                  if (message && !loading) {
+                    onSend(
+                      message,
+                      attachedImages.length > 0 ? attachedImages : undefined
+                    );
+                  }
+                }}
+                disabled={loading}
+              >
+                <Send className="h-3 w-3 mr-1" />
+                Send{" "}
+                {selectedPersona ? `as ${selectedPersona.persona_name}` : ""}
+              </Button>
+            </div>
+          </div>
         </CardContent>
       </Card>
     );
