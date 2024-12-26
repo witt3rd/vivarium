@@ -129,6 +129,8 @@ async def update_metadata(conv_id: str, update: MetadataUpdate) -> ConversationM
         metadata.audio_enabled = update.audio_enabled
     if update.voice_id is not None:
         metadata.voice_id = update.voice_id
+    if update.is_persona is not None:
+        metadata.is_persona = update.is_persona
 
     save_metadata(metadata)
     return metadata
@@ -588,16 +590,10 @@ async def delete_conversation(conv_id: str) -> None:
 @router.get("/{conv_id}/images/{image_id}")
 async def get_image(conv_id: str, image_id: str):
     """Get an image by its ID."""
-    # Load messages to find the image metadata
-    messages = load_messages(conv_id)
+    images_dir = get_images_dir(conv_id)
 
-    # Find the message containing this image
-    for message in messages:
-        if message.images:
-            for image in message.images:
-                if image.id == image_id:
-                    image_path = get_images_dir(conv_id) / image.filename
-                    if image_path.exists():
-                        return FileResponse(image_path)
+    # Find any file that starts with the image_id
+    for file in images_dir.glob(f"{image_id}.*"):
+        return FileResponse(file)
 
     raise HTTPException(status_code=404, detail="Image not found")

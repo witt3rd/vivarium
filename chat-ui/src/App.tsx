@@ -47,7 +47,7 @@ export default function App() {
   const init = async () => {
     try {
       const conversations =
-        await ConversationsService.getMetadataListConversationsGet();
+        await ConversationsService.getMetadataListApiConversationsGet();
       setConversations(conversations);
     } catch (error) {
       console.error("Failed to load conversations:", error);

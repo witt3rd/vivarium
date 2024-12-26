@@ -2,13 +2,11 @@
 /* istanbul ignore file */
 /* tslint:disable */
 /* eslint-disable */
-/**
- * Schema for creating a new message with optional images.
- */
-export type MessageCreate = {
+export type Body_add_message_api_conversations__conv_id__messages_post = {
     id: string;
     assistant_message_id: string;
-    content: Array<Record<string, any>>;
-    cache?: boolean;
+    content: string;
+    cache: string;
+    files?: Array<Blob>;
 };
 

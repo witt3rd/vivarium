@@ -2,7 +2,7 @@
 /* istanbul ignore file */
 /* tslint:disable */
 /* eslint-disable */
-import type { Body_add_message_conversations__conv_id__messages_post } from '../models/Body_add_message_conversations__conv_id__messages_post';
+import type { Body_add_message_api_conversations__conv_id__messages_post } from '../models/Body_add_message_api_conversations__conv_id__messages_post';
 import type { ConversationMetadata } from '../models/ConversationMetadata';
 import type { Message } from '../models/Message';
 import type { MetadataCreate } from '../models/MetadataCreate';
@@ -17,10 +17,10 @@ export class ConversationsService {
      * @returns ConversationMetadata Successful Response
      * @throws ApiError
      */
-    public static getMetadataListConversationsGet(): CancelablePromise<Array<ConversationMetadata>> {
+    public static getMetadataListApiConversationsGet(): CancelablePromise<Array<ConversationMetadata>> {
         return __request(OpenAPI, {
             method: 'GET',
-            url: '/conversations',
+            url: '/api/conversations',
         });
     }
     /**
@@ -30,12 +30,12 @@ export class ConversationsService {
      * @returns ConversationMetadata Successful Response
      * @throws ApiError
      */
-    public static createMetadataConversationsPost(
+    public static createMetadataApiConversationsPost(
         requestBody: MetadataCreate,
     ): CancelablePromise<ConversationMetadata> {
         return __request(OpenAPI, {
             method: 'POST',
-            url: '/conversations',
+            url: '/api/conversations',
             body: requestBody,
             mediaType: 'application/json',
             errors: {
@@ -50,12 +50,12 @@ export class ConversationsService {
      * @returns ConversationMetadata Successful Response
      * @throws ApiError
      */
-    public static getMetadataConversationsConvIdMetadataGet(
+    public static getMetadataApiConversationsConvIdMetadataGet(
         convId: string,
     ): CancelablePromise<ConversationMetadata> {
         return __request(OpenAPI, {
             method: 'GET',
-            url: '/conversations/{conv_id}/metadata',
+            url: '/api/conversations/{conv_id}/metadata',
             path: {
                 'conv_id': convId,
             },
@@ -72,13 +72,13 @@ export class ConversationsService {
      * @returns ConversationMetadata Successful Response
      * @throws ApiError
      */
-    public static updateMetadataConversationsConvIdMetadataPut(
+    public static updateMetadataApiConversationsConvIdMetadataPut(
         convId: string,
         requestBody: MetadataUpdate,
     ): CancelablePromise<ConversationMetadata> {
         return __request(OpenAPI, {
             method: 'PUT',
-            url: '/conversations/{conv_id}/metadata',
+            url: '/api/conversations/{conv_id}/metadata',
             path: {
                 'conv_id': convId,
             },
@@ -96,12 +96,12 @@ export class ConversationsService {
      * @returns Message Successful Response
      * @throws ApiError
      */
-    public static getMessagesConversationsConvIdMessagesGet(
+    public static getMessagesApiConversationsConvIdMessagesGet(
         convId: string,
     ): CancelablePromise<Array<Message>> {
         return __request(OpenAPI, {
             method: 'GET',
-            url: '/conversations/{conv_id}/messages',
+            url: '/api/conversations/{conv_id}/messages',
             path: {
                 'conv_id': convId,
             },
@@ -118,13 +118,13 @@ export class ConversationsService {
      * @returns any Successful Response
      * @throws ApiError
      */
-    public static addMessageConversationsConvIdMessagesPost(
+    public static addMessageApiConversationsConvIdMessagesPost(
         convId: string,
-        formData: Body_add_message_conversations__conv_id__messages_post,
+        formData: Body_add_message_api_conversations__conv_id__messages_post,
     ): CancelablePromise<any> {
         return __request(OpenAPI, {
             method: 'POST',
-            url: '/conversations/{conv_id}/messages',
+            url: '/api/conversations/{conv_id}/messages',
             path: {
                 'conv_id': convId,
             },
@@ -144,14 +144,14 @@ export class ConversationsService {
      * @returns Message Successful Response
      * @throws ApiError
      */
-    public static updateMessageConversationsConvIdMessagesMessageIdPut(
+    public static updateMessageApiConversationsConvIdMessagesMessageIdPut(
         convId: string,
         messageId: string,
         requestBody: Message,
     ): CancelablePromise<Array<Message>> {
         return __request(OpenAPI, {
             method: 'PUT',
-            url: '/conversations/{conv_id}/messages/{message_id}',
+            url: '/api/conversations/{conv_id}/messages/{message_id}',
             path: {
                 'conv_id': convId,
                 'message_id': messageId,
@@ -165,19 +165,19 @@ export class ConversationsService {
     }
     /**
      * Delete Message
-     * Delete a message.
+     * Delete a message and its associated images.
      * @param convId
      * @param messageId
      * @returns Message Successful Response
      * @throws ApiError
      */
-    public static deleteMessageConversationsConvIdMessagesMessageIdDelete(
+    public static deleteMessageApiConversationsConvIdMessagesMessageIdDelete(
         convId: string,
         messageId: string,
     ): CancelablePromise<Array<Message>> {
         return __request(OpenAPI, {
             method: 'DELETE',
-            url: '/conversations/{conv_id}/messages/{message_id}',
+            url: '/api/conversations/{conv_id}/messages/{message_id}',
             path: {
                 'conv_id': convId,
                 'message_id': messageId,
@@ -195,13 +195,13 @@ export class ConversationsService {
      * @returns Message Successful Response
      * @throws ApiError
      */
-    public static toggleMessageCacheConversationsConvIdMessagesMessageIdCachePost(
+    public static toggleMessageCacheApiConversationsConvIdMessagesMessageIdCachePost(
         convId: string,
         messageId: string,
     ): CancelablePromise<Array<Message>> {
         return __request(OpenAPI, {
             method: 'POST',
-            url: '/conversations/{conv_id}/messages/{message_id}/cache',
+            url: '/api/conversations/{conv_id}/messages/{message_id}/cache',
             path: {
                 'conv_id': convId,
                 'message_id': messageId,
@@ -218,12 +218,12 @@ export class ConversationsService {
      * @returns string Successful Response
      * @throws ApiError
      */
-    public static getMarkdownConversationsConvIdMarkdownGet(
+    public static getMarkdownApiConversationsConvIdMarkdownGet(
         convId: string,
     ): CancelablePromise<string> {
         return __request(OpenAPI, {
             method: 'GET',
-            url: '/conversations/{conv_id}/markdown',
+            url: '/api/conversations/{conv_id}/markdown',
             path: {
                 'conv_id': convId,
             },
@@ -239,12 +239,12 @@ export class ConversationsService {
      * @returns ConversationMetadata Successful Response
      * @throws ApiError
      */
-    public static cloneConversationConversationsConvIdClonePost(
+    public static cloneConversationApiConversationsConvIdClonePost(
         convId: string,
     ): CancelablePromise<ConversationMetadata> {
         return __request(OpenAPI, {
             method: 'POST',
-            url: '/conversations/{conv_id}/clone',
+            url: '/api/conversations/{conv_id}/clone',
             path: {
                 'conv_id': convId,
             },
@@ -261,13 +261,13 @@ export class ConversationsService {
      * @returns ConversationMetadata Successful Response
      * @throws ApiError
      */
-    public static addTagConversationsConvIdTagsTagPost(
+    public static addTagApiConversationsConvIdTagsTagPost(
         convId: string,
         tag: string,
     ): CancelablePromise<ConversationMetadata> {
         return __request(OpenAPI, {
             method: 'POST',
-            url: '/conversations/{conv_id}/tags/{tag}',
+            url: '/api/conversations/{conv_id}/tags/{tag}',
             path: {
                 'conv_id': convId,
                 'tag': tag,
@@ -285,13 +285,13 @@ export class ConversationsService {
      * @returns ConversationMetadata Successful Response
      * @throws ApiError
      */
-    public static removeTagConversationsConvIdTagsTagDelete(
+    public static removeTagApiConversationsConvIdTagsTagDelete(
         convId: string,
         tag: string,
     ): CancelablePromise<ConversationMetadata> {
         return __request(OpenAPI, {
             method: 'DELETE',
-            url: '/conversations/{conv_id}/tags/{tag}',
+            url: '/api/conversations/{conv_id}/tags/{tag}',
             path: {
                 'conv_id': convId,
                 'tag': tag,
@@ -307,10 +307,10 @@ export class ConversationsService {
      * @returns string Successful Response
      * @throws ApiError
      */
-    public static listTagsConversationsTagsGet(): CancelablePromise<Array<string>> {
+    public static listTagsApiConversationsTagsGet(): CancelablePromise<Array<string>> {
         return __request(OpenAPI, {
             method: 'GET',
-            url: '/conversations/tags',
+            url: '/api/conversations/tags',
         });
     }
     /**
@@ -320,12 +320,12 @@ export class ConversationsService {
      * @returns ConversationMetadata Successful Response
      * @throws ApiError
      */
-    public static getConversationsByTagConversationsTagsTagGet(
+    public static getConversationsByTagApiConversationsTagsTagGet(
         tag: string,
     ): CancelablePromise<Array<ConversationMetadata>> {
         return __request(OpenAPI, {
             method: 'GET',
-            url: '/conversations/tags/{tag}',
+            url: '/api/conversations/tags/{tag}',
             path: {
                 'tag': tag,
             },
@@ -341,14 +341,38 @@ export class ConversationsService {
      * @returns any Successful Response
      * @throws ApiError
      */
-    public static deleteConversationConversationsConvIdDelete(
+    public static deleteConversationApiConversationsConvIdDelete(
         convId: string,
     ): CancelablePromise<any> {
         return __request(OpenAPI, {
             method: 'DELETE',
-            url: '/conversations/{conv_id}',
+            url: '/api/conversations/{conv_id}',
             path: {
                 'conv_id': convId,
+            },
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Get Image
+     * Get an image by its ID.
+     * @param convId
+     * @param imageId
+     * @returns any Successful Response
+     * @throws ApiError
+     */
+    public static getImageApiConversationsConvIdImagesImageIdGet(
+        convId: string,
+        imageId: string,
+    ): CancelablePromise<any> {
+        return __request(OpenAPI, {
+            method: 'GET',
+            url: '/api/conversations/{conv_id}/images/{image_id}',
+            path: {
+                'conv_id': convId,
+                'image_id': imageId,
             },
             errors: {
                 422: `Validation Error`,

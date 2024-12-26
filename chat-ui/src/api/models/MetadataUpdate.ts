@@ -13,5 +13,6 @@ export type MetadataUpdate = {
     tags?: Array<string>;
     audio_enabled?: (boolean | null);
     voice_id?: (string | null);
+    is_persona?: (boolean | null);
 };
 

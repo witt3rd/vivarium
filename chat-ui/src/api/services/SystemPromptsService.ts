@@ -15,10 +15,10 @@ export class SystemPromptsService {
      * @returns SystemPrompt Successful Response
      * @throws ApiError
      */
-    public static getSystemPromptsSystemPromptsGet(): CancelablePromise<Array<SystemPrompt>> {
+    public static getSystemPromptsApiSystemPromptsGet(): CancelablePromise<Array<SystemPrompt>> {
         return __request(OpenAPI, {
             method: 'GET',
-            url: '/system-prompts',
+            url: '/api/system-prompts',
         });
     }
     /**
@@ -28,12 +28,12 @@ export class SystemPromptsService {
      * @returns SystemPrompt Successful Response
      * @throws ApiError
      */
-    public static createSystemPromptSystemPromptsPost(
+    public static createSystemPromptApiSystemPromptsPost(
         requestBody: SystemPromptCreate,
     ): CancelablePromise<SystemPrompt> {
         return __request(OpenAPI, {
             method: 'POST',
-            url: '/system-prompts',
+            url: '/api/system-prompts',
             body: requestBody,
             mediaType: 'application/json',
             errors: {
@@ -48,12 +48,12 @@ export class SystemPromptsService {
      * @returns SystemPrompt Successful Response
      * @throws ApiError
      */
-    public static getSystemPromptSystemPromptsPromptIdGet(
+    public static getSystemPromptApiSystemPromptsPromptIdGet(
         promptId: string,
     ): CancelablePromise<SystemPrompt> {
         return __request(OpenAPI, {
             method: 'GET',
-            url: '/system-prompts/{prompt_id}',
+            url: '/api/system-prompts/{prompt_id}',
             path: {
                 'prompt_id': promptId,
             },
@@ -70,13 +70,13 @@ export class SystemPromptsService {
      * @returns SystemPrompt Successful Response
      * @throws ApiError
      */
-    public static updateSystemPromptSystemPromptsPromptIdPut(
+    public static updateSystemPromptApiSystemPromptsPromptIdPut(
         promptId: string,
         requestBody: SystemPromptUpdate,
     ): CancelablePromise<SystemPrompt> {
         return __request(OpenAPI, {
             method: 'PUT',
-            url: '/system-prompts/{prompt_id}',
+            url: '/api/system-prompts/{prompt_id}',
             path: {
                 'prompt_id': promptId,
             },
@@ -94,12 +94,12 @@ export class SystemPromptsService {
      * @returns any Successful Response
      * @throws ApiError
      */
-    public static deleteSystemPromptSystemPromptsPromptIdDelete(
+    public static deleteSystemPromptApiSystemPromptsPromptIdDelete(
         promptId: string,
     ): CancelablePromise<any> {
         return __request(OpenAPI, {
             method: 'DELETE',
-            url: '/system-prompts/{prompt_id}',
+            url: '/api/system-prompts/{prompt_id}',
             path: {
                 'prompt_id': promptId,
             },

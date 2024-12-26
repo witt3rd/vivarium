@@ -102,6 +102,9 @@ export function Conversation({
   // Add error state for fetching voices
   const [fetchError, setFetchError] = useState<boolean>(false);
 
+  // Add state for persona toggle
+  const [isPersona, setIsPersona] = useState<boolean>(false);
+
   const fetchVoices = useCallback(async () => {
     if (voices.length > 0 || loadingVoices || fetchError) return; // Use cached voices if available, if already loading, or if there's an error
     setLoadingVoices(true);
@@ -374,7 +377,7 @@ export function Conversation({
 
         // Get final message state
         const messages =
-          await ConversationsService.getMessagesConversationsConvIdMessagesGet(
+          await ConversationsService.getMessagesApiConversationsConvIdMessagesGet(
             currentId
           );
         const finalMessage = messages.find((m) => m.id === assistantMessageId);
@@ -431,7 +434,7 @@ export function Conversation({
 
   // Load system prompts
   useEffect(() => {
-    SystemPromptsService.getSystemPromptsSystemPromptsGet()
+    SystemPromptsService.getSystemPromptsApiSystemPromptsGet()
       .then(setSystemPrompts)
       .catch((error: unknown) => {
         console.error("Error loading system prompts:", error);
@@ -443,11 +446,11 @@ export function Conversation({
     if (!currentId) return;
 
     shouldAutoScroll.current = true; // Set flag before loading messages
-    ConversationsService.getMessagesConversationsConvIdMessagesGet(currentId)
+    ConversationsService.getMessagesApiConversationsConvIdMessagesGet(currentId)
       .then(async (messages) => {
         if (currentMetadata?.system_prompt_id) {
           const prompt =
-            await SystemPromptsService.getSystemPromptSystemPromptsPromptIdGet(
+            await SystemPromptsService.getSystemPromptApiSystemPromptsPromptIdGet(
               currentMetadata.system_prompt_id
             );
           setMessages([
@@ -487,9 +490,10 @@ export function Conversation({
       const createParams: MetadataCreate = {
         name: "New Conversation",
         id: crypto.randomUUID(),
+        is_persona: false,
       };
       const metadata =
-        await ConversationsService.createMetadataConversationsPost(
+        await ConversationsService.createMetadataApiConversationsPost(
           createParams
         );
       if (metadata.id) {
@@ -508,13 +512,14 @@ export function Conversation({
 
     try {
       const updated =
-        await ConversationsService.updateMetadataConversationsConvIdMetadataPut(
+        await ConversationsService.updateMetadataApiConversationsConvIdMetadataPut(
           currentId,
           {
             name: editedTitle.trim(),
             system_prompt_id: currentMetadata?.system_prompt_id ?? null,
             model: currentMetadata?.model ?? "claude-3-5-sonnet-20241022",
             max_tokens: currentMetadata?.max_tokens ?? 8192,
+            is_persona: currentMetadata?.is_persona ?? false,
           }
         );
       onConversationsChange(
@@ -532,13 +537,14 @@ export function Conversation({
 
     try {
       const updated =
-        await ConversationsService.updateMetadataConversationsConvIdMetadataPut(
+        await ConversationsService.updateMetadataApiConversationsConvIdMetadataPut(
           currentId,
           {
             name: currentMetadata?.name ?? "New Conversation",
             system_prompt_id: promptId,
             model: currentMetadata?.model ?? "claude-3-5-sonnet-20241022",
             max_tokens: currentMetadata?.max_tokens ?? 8192,
+            is_persona: currentMetadata?.is_persona ?? false,
           }
         );
       onConversationsChange(
@@ -547,7 +553,7 @@ export function Conversation({
 
       if (promptId) {
         const prompt =
-          await SystemPromptsService.getSystemPromptSystemPromptsPromptIdGet(
+          await SystemPromptsService.getSystemPromptApiSystemPromptsPromptIdGet(
             promptId
           );
         setMessages([
@@ -586,7 +592,7 @@ export function Conversation({
 
       try {
         const updated =
-          await ConversationsService.updateMetadataConversationsConvIdMetadataPut(
+          await ConversationsService.updateMetadataApiConversationsConvIdMetadataPut(
             currentId,
             {
               name: currentMetadata?.name ?? "New Conversation",
@@ -596,7 +602,7 @@ export function Conversation({
             }
           );
 
-        await SystemPromptsService.deleteSystemPromptSystemPromptsPromptIdDelete(
+        await SystemPromptsService.deleteSystemPromptApiSystemPromptsPromptIdDelete(
           messageId
         );
 
@@ -628,7 +634,7 @@ export function Conversation({
       );
 
       try {
-        await ConversationsService.deleteMessageConversationsConvIdMessagesMessageIdDelete(
+        await ConversationsService.deleteMessageApiConversationsConvIdMessagesMessageIdDelete(
           currentId,
           messageId
         );
@@ -656,7 +662,7 @@ export function Conversation({
     if (message?.role === "system") {
       try {
         const updatedPrompt =
-          await SystemPromptsService.updateSystemPromptSystemPromptsPromptIdPut(
+          await SystemPromptsService.updateSystemPromptApiSystemPromptsPromptIdPut(
             messageId,
             {
               is_cached: !message.cache,
@@ -677,7 +683,7 @@ export function Conversation({
     }
 
     try {
-      await ConversationsService.toggleMessageCacheConversationsConvIdMessagesMessageIdCachePost(
+      await ConversationsService.toggleMessageCacheApiConversationsConvIdMessagesMessageIdCachePost(
         currentId,
         messageId
       );
@@ -698,7 +704,7 @@ export function Conversation({
     try {
       if (editedMessage.role === "system") {
         const updatedPrompt =
-          await SystemPromptsService.updateSystemPromptSystemPromptsPromptIdPut(
+          await SystemPromptsService.updateSystemPromptApiSystemPromptsPromptIdPut(
             editedMessage.id,
             {
               name: editedMessage.content[0].text,
@@ -709,7 +715,7 @@ export function Conversation({
           prev.map((p) => (p.id === editedMessage.id ? updatedPrompt : p))
         );
       } else {
-        await ConversationsService.updateMessageConversationsConvIdMessagesMessageIdPut(
+        await ConversationsService.updateMessageApiConversationsConvIdMessagesMessageIdPut(
           currentId,
           editedMessage.id,
           editedMessage
@@ -727,7 +733,7 @@ export function Conversation({
   const handleNewSystemPrompt = async () => {
     try {
       const newPrompt =
-        await SystemPromptsService.createSystemPromptSystemPromptsPost({
+        await SystemPromptsService.createSystemPromptApiSystemPromptsPost({
           name: "New System Prompt",
           content: "",
           is_cached: false,
@@ -748,7 +754,7 @@ export function Conversation({
 
     try {
       const text =
-        await ConversationsService.getMarkdownConversationsConvIdMarkdownGet(
+        await ConversationsService.getMarkdownApiConversationsConvIdMarkdownGet(
           currentId
         );
 
@@ -769,7 +775,7 @@ export function Conversation({
 
   const handleDelete = async (id: string) => {
     try {
-      await ConversationsService.deleteConversationConversationsConvIdDelete(
+      await ConversationsService.deleteConversationApiConversationsConvIdDelete(
         id
       );
       onConversationsChange(conversations.filter((c) => c.id !== id));
@@ -791,7 +797,7 @@ export function Conversation({
     if (!currentId) return;
     try {
       const clonedConv =
-        await ConversationsService.cloneConversationConversationsConvIdClonePost(
+        await ConversationsService.cloneConversationApiConversationsConvIdClonePost(
           currentId
         );
       // Copy message count from source conversation for optimistic UI update
@@ -830,6 +836,58 @@ export function Conversation({
       setSelectedVoiceId(currentConversation.voice_id ?? null);
     }
   }, [currentConversation]);
+
+  // Add effect to initialize persona state from metadata
+  useEffect(() => {
+    if (currentMetadata) {
+      setIsPersona(currentMetadata.is_persona ?? false);
+    }
+  }, [currentId]); // Only run when conversation ID changes
+
+  // Add handler for persona toggle
+  const handlePersonaToggle = async (checked: boolean) => {
+    if (!currentId || !currentMetadata) return;
+
+    console.log("handlePersonaToggle called with:", { checked, currentId });
+    console.log("Current metadata before update:", currentMetadata);
+    console.log("Current isPersona state:", isPersona);
+
+    try {
+      const updatePayload = {
+        name: currentMetadata.name,
+        system_prompt_id: currentMetadata.system_prompt_id,
+        model: currentMetadata.model,
+        max_tokens: currentMetadata.max_tokens,
+        audio_enabled: currentMetadata.audio_enabled,
+        voice_id: currentMetadata.voice_id,
+        is_persona: checked,
+      };
+
+      console.log("Sending API request with payload:", updatePayload);
+      const updated =
+        await ConversationsService.updateMetadataApiConversationsConvIdMetadataPut(
+          currentId,
+          updatePayload
+        );
+      console.log("API response:", updated);
+      console.log("API response is_persona value:", updated.is_persona);
+      console.log("Updating conversations with new metadata");
+
+      onConversationsChange(
+        conversations.map((c) => (c.id === currentId ? updated : c))
+      );
+      console.log("Setting isPersona state to:", checked);
+      setIsPersona(checked);
+    } catch (error) {
+      console.error("Error updating persona setting:", error);
+      setError("Failed to update persona setting");
+      console.log(
+        "Reverting isPersona state to:",
+        currentMetadata.is_persona ?? false
+      );
+      setIsPersona(currentMetadata.is_persona ?? false);
+    }
+  };
 
   return (
     <Card
@@ -994,9 +1052,23 @@ export function Conversation({
               >
                 <Plus className="text-muted-foreground scale-75 transform" />
               </Button>
+              <div className="flex items-center gap-2 scale-75 transform">
+                <Checkbox
+                  id="is-persona"
+                  checked={isPersona}
+                  onCheckedChange={handlePersonaToggle}
+                />
+                <label
+                  htmlFor="is-persona"
+                  className="text-2xs font-medium text-muted-foreground/70 cursor-pointer select-none"
+                >
+                  Persona
+                </label>
+              </div>
               <div className="flex-1" />
               <div className="flex items-center gap-2 scale-75 transform">
                 <Checkbox
+                  id="audio-enabled"
                   checked={audioEnabled}
                   onCheckedChange={(checked) => {
                     const isChecked = checked === true;
@@ -1023,7 +1095,7 @@ export function Conversation({
                         audio_enabled: isChecked,
                         voice_id: newVoiceId,
                       };
-                      ConversationsService.updateMetadataConversationsConvIdMetadataPut(
+                      ConversationsService.updateMetadataApiConversationsConvIdMetadataPut(
                         currentId,
                         newMetadata
                       )
@@ -1073,7 +1145,7 @@ export function Conversation({
                       audio_enabled: audioEnabled,
                       voice_id: value,
                     };
-                    ConversationsService.updateMetadataConversationsConvIdMetadataPut(
+                    ConversationsService.updateMetadataApiConversationsConvIdMetadataPut(
                       currentId,
                       newMetadata
                     )

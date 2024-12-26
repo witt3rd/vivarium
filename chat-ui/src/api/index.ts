@@ -7,11 +7,10 @@ export { CancelablePromise, CancelError } from './core/CancelablePromise';
 export { OpenAPI } from './core/OpenAPI';
 export type { OpenAPIConfig } from './core/OpenAPI';
 
-export type { Body_add_message_conversations__conv_id__messages_post } from './models/Body_add_message_conversations__conv_id__messages_post';
+export type { Body_add_message_api_conversations__conv_id__messages_post } from './models/Body_add_message_api_conversations__conv_id__messages_post';
 export type { ConversationMetadata } from './models/ConversationMetadata';
 export type { HTTPValidationError } from './models/HTTPValidationError';
 export type { Message } from './models/Message';
-export type { MessageCreate } from './models/MessageCreate';
 export type { MessageImage } from './models/MessageImage';
 export type { MetadataCreate } from './models/MetadataCreate';
 export type { MetadataUpdate } from './models/MetadataUpdate';
