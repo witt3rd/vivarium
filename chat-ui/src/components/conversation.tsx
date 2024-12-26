@@ -1097,6 +1097,7 @@ export function Conversation({
                           size="icon"
                           className="h-6 w-6"
                           onClick={() => onRemove?.(id)}
+                          title="Close panel"
                         >
                           <X className="h-4 w-4" />
                         </Button>
@@ -1141,6 +1142,7 @@ export function Conversation({
                 size="icon"
                 onClick={handleNewSystemPrompt}
                 className="h-5 w-5"
+                title="Create new system prompt"
               >
                 <Plus className="text-muted-foreground scale-75 transform" />
               </Button>
@@ -1353,6 +1355,7 @@ export function Conversation({
                     behavior: "smooth",
                   })
                 }
+                title="Scroll to top"
               >
                 <ChevronsUp className="h-4 w-4" />
               </Button>
@@ -1365,6 +1368,7 @@ export function Conversation({
                     behavior: "smooth",
                   })
                 }
+                title="Scroll to bottom"
               >
                 <ChevronsDown className="h-4 w-4" />
               </Button>

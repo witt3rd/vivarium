@@ -147,6 +147,7 @@ export const MessageInput = forwardRef<MessageInputHandle, MessageInputProps>(
               className="h-4 w-4 p-0 hover:bg-transparent"
               onClick={() => fileInputRef.current?.click()}
               disabled={loading || attachedImages.length >= 20}
+              title="Upload images"
             >
               <div className="scale-50 transform">
                 <Image size={16} strokeWidth={1} />

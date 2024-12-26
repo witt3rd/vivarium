@@ -241,6 +241,7 @@ export function MessageComponent({
               variant="ghost"
               className="h-4 w-4 p-0 hover:bg-transparent"
               onClick={handleEdit}
+              title="Edit message"
             >
               <div className="scale-50 transform">
                 <Edit2 size={16} strokeWidth={1} />
@@ -250,6 +251,7 @@ export function MessageComponent({
               variant="ghost"
               className="h-4 w-4 p-0 hover:bg-transparent"
               onClick={handleCopy}
+              title="Copy message"
             >
               <div className="scale-50 transform">
                 <Copy size={16} strokeWidth={1} />
@@ -259,6 +261,7 @@ export function MessageComponent({
               variant="ghost"
               className="h-4 w-4 p-0 hover:bg-transparent"
               onClick={handleDelete}
+              title="Delete message"
             >
               <div className="scale-50 transform">
                 <Trash2 size={16} strokeWidth={1} />

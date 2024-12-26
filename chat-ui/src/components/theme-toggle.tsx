@@ -13,6 +13,7 @@ export function ThemeToggle() {
       size="icon"
       className="h-3.5 w-3.5"
       onClick={() => setTheme(theme === "light" ? "dark" : "light")}
+      title={`Switch to ${theme === "light" ? "dark" : "light"} theme`}
     >
       <Sun className="text-muted-foreground scale-75 transform rotate-0 transition-all dark:-rotate-90 dark:scale-0" />
       <Moon className="absolute text-muted-foreground scale-75 transform rotate-90 dark:rotate-0 dark:scale-100" />

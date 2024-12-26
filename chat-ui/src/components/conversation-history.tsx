@@ -99,6 +99,7 @@ export function ConversationHistory({
                 onClick={onNew}
                 disabled={disableNew}
                 className="h-5 w-5 relative z-20"
+                title="New conversation"
               >
                 <Plus className="text-muted-foreground scale-75 transform" />
               </Button>
@@ -161,6 +162,7 @@ export function ConversationHistory({
                       size="icon"
                       onClick={(e) => handleDelete(e, conv)}
                       className="h-3.5 w-3.5"
+                      title="Delete conversation"
                     >
                       <Trash2 className="text-muted-foreground scale-75 transform" />
                     </Button>

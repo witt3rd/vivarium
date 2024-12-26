@@ -98,6 +98,7 @@ export default function App() {
             size="icon"
             onClick={handleNewPanel}
             className="h-5 w-5"
+            title="Add new panel"
           >
             <Plus className="text-muted-foreground scale-75 transform" />
           </Button>
