@@ -253,6 +253,7 @@ export const MessageInput = forwardRef<MessageInputHandle, MessageInputProps>(
                       <CommandItem
                         onSelect={() => setSelectedPersona(null)}
                         className="text-2xs cursor-pointer"
+                        data-state={selectedPersona === null ? "selected" : ""}
                       >
                         None (Send as User)
                       </CommandItem>
@@ -268,6 +269,9 @@ export const MessageInput = forwardRef<MessageInputHandle, MessageInputProps>(
                             key={conv.id}
                             onSelect={() => setSelectedPersona(conv)}
                             className="text-2xs cursor-pointer"
+                            data-state={
+                              selectedPersona?.id === conv.id ? "selected" : ""
+                            }
                           >
                             {conv.persona_name}
                           </CommandItem>
@@ -281,7 +285,7 @@ export const MessageInput = forwardRef<MessageInputHandle, MessageInputProps>(
                 variant={loading ? "destructive" : "default"}
                 className="w-full h-7 text-2xs"
                 onClick={loading ? handleCancel : handleSend}
-                disabled={!loading && !inputValue.trim()}
+                disabled={!loading && !selectedPersona && !inputValue.trim()}
               >
                 {loading ? (
                   <>
