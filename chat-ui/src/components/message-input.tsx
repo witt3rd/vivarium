@@ -48,6 +48,7 @@ export const MessageInput = forwardRef<MessageInputHandle, MessageInputProps>(
     const textareaRef = useRef<HTMLTextAreaElement>(null);
     const fileInputRef = useRef<HTMLInputElement>(null);
     const [attachedImages, setAttachedImages] = useState<File[]>([]);
+    const [inputValue, setInputValue] = useState("");
     const [selectedPersona, setSelectedPersona] =
       useState<ConversationMetadata | null>(null);
     const abortControllerRef = useRef<AbortController | null>(null);
@@ -71,7 +72,7 @@ export const MessageInput = forwardRef<MessageInputHandle, MessageInputProps>(
     }));
 
     const handleSend = useCallback(async () => {
-      const message = textareaRef.current?.value.trim() || "";
+      const message = inputValue.trim();
       if (!loading && (message || selectedPersona)) {
         // Create new abort controller for this request
         abortControllerRef.current = new AbortController();
@@ -82,11 +83,12 @@ export const MessageInput = forwardRef<MessageInputHandle, MessageInputProps>(
             abortControllerRef.current,
             attachedImages.length > 0 ? attachedImages : undefined
           );
+          setInputValue("");
         } finally {
           abortControllerRef.current = null;
         }
       }
-    }, [onSend, loading, attachedImages, selectedPersona]);
+    }, [onSend, loading, attachedImages, selectedPersona, inputValue]);
 
     const handleCancel = useCallback(() => {
       if (abortControllerRef.current) {
@@ -211,6 +213,8 @@ export const MessageInput = forwardRef<MessageInputHandle, MessageInputProps>(
                 rows={3}
                 onKeyDown={handleKeyDown}
                 onPaste={handlePaste}
+                onChange={(e) => setInputValue(e.target.value)}
+                value={inputValue}
                 disabled={loading}
                 autoFocus
               />
@@ -277,11 +281,7 @@ export const MessageInput = forwardRef<MessageInputHandle, MessageInputProps>(
                 variant={loading ? "destructive" : "default"}
                 className="w-full h-7 text-2xs"
                 onClick={loading ? handleCancel : handleSend}
-                disabled={
-                  !loading &&
-                  !textareaRef.current?.value.trim() &&
-                  !selectedPersona
-                }
+                disabled={!loading && !inputValue.trim()}
               >
                 {loading ? (
                   <>
