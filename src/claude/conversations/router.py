@@ -10,6 +10,7 @@ from typing import (
     Callable,
     Dict,
     List,
+    Protocol,
     TypedDict,
     TypeVar,
     cast,
@@ -17,7 +18,7 @@ from typing import (
 
 from anthropic import Anthropic
 from anthropic.types import MessageParam
-from fastapi import APIRouter, File, Form, HTTPException, Query, UploadFile
+from fastapi import APIRouter, File, Form, HTTPException, Query, Request, UploadFile
 from fastapi.responses import FileResponse, StreamingResponse
 
 from ..system_prompts.schema import SystemPrompt
@@ -42,6 +43,9 @@ from .storage import (
     update_message_count,
 )
 
+# Dictionary to track active message streams
+active_streams: Dict[str, Any] = {}
+
 
 def get_images_dir(conv_id: str) -> Path:
     """Get the images directory for a conversation."""
@@ -55,7 +59,7 @@ T = TypeVar("T")
 
 
 async def atomic_operation(
-    conv_id: str, operation: Callable[..., Awaitable[T]], *args, **kwargs
+    conv_id: str, operation: Callable[..., Awaitable[T]], *args: Any, **kwargs: Any
 ) -> T:
     """
     Execute an operation atomically, maintaining consistency between messages and metadata.
@@ -217,8 +221,13 @@ async def toggle_message_cache(conv_id: str, message_id: str) -> List[Message]:
     raise HTTPException(status_code=404, detail="Message not found")
 
 
+class StreamCloseable(Protocol):
+    async def close(self) -> None: ...
+
+
 @router.post("/{conv_id}/messages", response_model=None)
 async def add_message(
+    request: Request,
     conv_id: str,
     id: Annotated[str, Form()],
     assistant_message_id: Annotated[str, Form()],
@@ -434,10 +443,10 @@ async def add_message(
             response_text = ""
             usage_data = None
             assistant_message_saved = False
+            stream: StreamCloseable | None = None
 
             try:
                 # Get Claude's streaming response
-                # Only include system parameter if we have system content
                 create_params = {
                     "model": metadata.model,
                     "max_tokens": metadata.max_tokens,
@@ -450,6 +459,20 @@ async def add_message(
                 stream = client.messages.create(**create_params)
 
                 for chunk in stream:
+                    # Check if client has disconnected
+                    if await request.is_disconnected():
+                        print("Client disconnected, stopping stream")
+                        if (
+                            stream
+                            and hasattr(stream, "close")
+                            and callable(stream.close)
+                        ):
+                            try:
+                                await stream.close()
+                            except:
+                                print("Failed to close stream after client disconnect")
+                        return
+
                     event: Dict[str, Any] = {
                         "type": chunk.type,
                     }
@@ -507,9 +530,22 @@ async def add_message(
                                 if value is not None:
                                     setattr(usage_data, field, value)
 
-                    yield f"data: {json.dumps(event)}\n\n"
+                    try:
+                        yield f"data: {json.dumps(event)}\n\n"
+                    except:
+                        print("Failed to send chunk, client likely disconnected")
+                        if (
+                            stream
+                            and hasattr(stream, "close")
+                            and callable(stream.close)
+                        ):
+                            try:
+                                await stream.close()
+                            except:
+                                print("Failed to close stream after send failure")
+                        return
 
-                # Save the complete response atomically
+                # Save the assistant message if we completed normally
                 if not assistant_message_saved:
                     assistant_message = Message(
                         id=assistant_message_id,
@@ -523,15 +559,22 @@ async def add_message(
                     update_message_count(conv_id, len(messages))
                     assistant_message_saved = True
 
-                # Send end of stream marker
-                yield "data: [DONE]\n\n"
+                    try:
+                        yield "data: [DONE]\n\n"
+                    except:
+                        print("Failed to send DONE message, client likely disconnected")
+                        return
 
             except Exception as e:
-                # If we haven't saved the assistant message yet, restore original state
+                print(f"Error in stream: {e}")
+                if stream and hasattr(stream, "close") and callable(stream.close):
+                    try:
+                        await stream.close()
+                    except:
+                        print("Failed to close stream after error")
                 if not assistant_message_saved:
                     save_messages(conv_id, original_messages)
                     update_message_count(conv_id, original_count)
-                yield f"data: Error: {str(e)}\n\n"
 
         return StreamingResponse(
             stream_response(),
@@ -540,6 +583,7 @@ async def add_message(
 
     except Exception as e:
         # Restore original state on error
+        print(f"Error: {e}")
         save_messages(conv_id, original_messages)
         update_message_count(conv_id, original_count)
         raise HTTPException(status_code=500, detail=str(e))
@@ -586,12 +630,7 @@ async def get_transcript(
             prefix = user_prefix
 
         content = "\n\n".join(
-            str(block["text"])
-            # .replace("_", "\\_")
-            # .replace("*", "\\*")
-            # .replace("`", "\\`")
-            for block in message.content
-            if block["type"] == "text"
+            str(block["text"]) for block in message.content if block["type"] == "text"
         )
 
         # Format line based on whether prefix should be included

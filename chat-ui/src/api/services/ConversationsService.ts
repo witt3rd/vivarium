@@ -213,6 +213,27 @@ export class ConversationsService {
         });
     }
     /**
+     * Cancel Message
+     * Cancel an ongoing message stream.
+     * @param assistantMessageId
+     * @returns any Successful Response
+     * @throws ApiError
+     */
+    public static cancelMessageApiConversationsMessagesAssistantMessageIdCancelPost(
+        assistantMessageId: string,
+    ): CancelablePromise<any> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/api/conversations/messages/{assistant_message_id}/cancel',
+            path: {
+                'assistant_message_id': assistantMessageId,
+            },
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
      * Get Transcript
      * Get messages in markdown format with configurable role prefixes.
      *

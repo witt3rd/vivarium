@@ -12,7 +12,7 @@ import {
 } from "@/components/ui/command";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { SmallTextarea } from "@/components/ui/small-inputs";
-import { Image, Send, X } from "lucide-react";
+import { Image, Loader2, Send, X } from "lucide-react";
 import {
   forwardRef,
   useCallback,
@@ -31,8 +31,9 @@ interface MessageInputProps {
   onSend: (
     message: string,
     targetPersonaId: string | null,
+    abortController: AbortController,
     files?: File[]
-  ) => void;
+  ) => Promise<void>;
   isPreCached: boolean;
   onPreCacheChange: (cached: boolean) => void;
   loading?: boolean;
@@ -49,6 +50,7 @@ export const MessageInput = forwardRef<MessageInputHandle, MessageInputProps>(
     const [attachedImages, setAttachedImages] = useState<File[]>([]);
     const [selectedPersona, setSelectedPersona] =
       useState<ConversationMetadata | null>(null);
+    const abortControllerRef = useRef<AbortController | null>(null);
 
     // Keep focus on the textarea
     useEffect(() => {
@@ -68,21 +70,43 @@ export const MessageInput = forwardRef<MessageInputHandle, MessageInputProps>(
       },
     }));
 
+    const handleSend = useCallback(async () => {
+      const message = textareaRef.current?.value.trim() || "";
+      if (!loading && (message || selectedPersona)) {
+        // Create new abort controller for this request
+        abortControllerRef.current = new AbortController();
+        try {
+          await onSend(
+            message,
+            selectedPersona?.id || null,
+            abortControllerRef.current,
+            attachedImages.length > 0 ? attachedImages : undefined
+          );
+        } finally {
+          abortControllerRef.current = null;
+        }
+      }
+    }, [onSend, loading, attachedImages, selectedPersona]);
+
+    const handleCancel = useCallback(() => {
+      console.log("Cancel handler called");
+      if (abortControllerRef.current) {
+        console.log("Aborting request...");
+        abortControllerRef.current.abort();
+        abortControllerRef.current = null;
+      } else {
+        console.log("No active abort controller found");
+      }
+    }, []);
+
     const handleKeyDown = useCallback(
       (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
         if (e.key === "Enter" && !e.shiftKey) {
           e.preventDefault();
-          const message = e.currentTarget.value.trim();
-          if (message && !loading) {
-            onSend(
-              message,
-              selectedPersona?.id || null,
-              attachedImages.length > 0 ? attachedImages : undefined
-            );
-          }
+          handleSend();
         }
       },
-      [onSend, loading, attachedImages, selectedPersona]
+      [handleSend]
     );
 
     const validateAndAddImage = useCallback(
@@ -254,22 +278,29 @@ export const MessageInput = forwardRef<MessageInputHandle, MessageInputProps>(
               </Command>
               <Button
                 size="sm"
+                variant={loading ? "destructive" : "default"}
                 className="w-full h-7 text-2xs"
-                onClick={() => {
-                  const message = textareaRef.current?.value.trim();
-                  if (!loading && (message || selectedPersona)) {
-                    onSend(
-                      message || "",
-                      selectedPersona?.id || null,
-                      attachedImages.length > 0 ? attachedImages : undefined
-                    );
-                  }
-                }}
-                disabled={loading}
+                onClick={loading ? handleCancel : handleSend}
+                disabled={
+                  !loading &&
+                  !textareaRef.current?.value.trim() &&
+                  !selectedPersona
+                }
               >
-                <Send className="h-3 w-3 mr-1" />
-                Send{" "}
-                {selectedPersona ? `to ${selectedPersona.persona_name}` : ""}
+                {loading ? (
+                  <>
+                    <Loader2 className="h-3 w-3 mr-1 animate-spin" />
+                    Cancel
+                  </>
+                ) : (
+                  <>
+                    <Send className="h-3 w-3 mr-1" />
+                    Send{" "}
+                    {selectedPersona
+                      ? `to ${selectedPersona.persona_name}`
+                      : ""}
+                  </>
+                )}
               </Button>
             </div>
           </div>

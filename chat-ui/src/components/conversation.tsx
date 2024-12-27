@@ -186,6 +186,7 @@ export function Conversation({
     async (
       messageText: string,
       targetPersonaId: string | null,
+      abortController: AbortController,
       files?: File[]
     ) => {
       if (!currentId || (!messageText.trim() && !targetPersonaId)) return;
@@ -297,6 +298,7 @@ export function Conversation({
           {
             method: "POST",
             body: formData,
+            signal: abortController.signal,
           }
         );
 
@@ -409,6 +411,27 @@ export function Conversation({
               }
             }
           }
+        } catch (error) {
+          // Check if this was an abort
+          if (error instanceof Error && error.name === "AbortError") {
+            // Clean up the UI for aborted request
+            setMessages((prev) =>
+              prev.filter((m) => m.id !== assistantMessageId)
+            );
+            onConversationsChange(
+              conversations.map((c) =>
+                c.id === currentId
+                  ? {
+                      ...c,
+                      message_count: (currentMetadata?.message_count ?? 0) - 1,
+                    }
+                  : c
+              )
+            );
+            // Don't throw for aborted requests
+            return;
+          }
+          throw error; // Re-throw other errors
         } finally {
           reader.releaseLock();
         }
