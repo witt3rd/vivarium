@@ -238,18 +238,6 @@ async def add_message(
         # Parse content from JSON string
         content_list = cast(List[Dict[str, Any]], json.loads(content))
 
-        # If we have a target_persona and no content, create a test message
-        if target_persona:
-            if not content_list:
-                content_list = [
-                    {"type": "text", "text": f"This is a message to {target_persona}"}
-                ]
-            else:
-                content_list[0]["text"] = (
-                    f"This is a message to {target_persona}: {content_list[0]['text']}"
-                )
-        print(f"[DEBUG] content_list: {content_list}")
-
         # Convert cache string to bool
         cache_bool = cache.lower() == "true"
 
@@ -318,75 +306,128 @@ async def add_message(
                 except Exception:
                     raise
 
-        # Create the user message
-        user_message = Message(
-            id=message.id,
-            role="user",
-            content=message.content,
-            images=message_images if message_images else None,
-            timestamp=datetime.now(timezone.utc).isoformat(),
-            cache=message.cache,
-            assistant_message_id=message.assistant_message_id,
-        )
+        # Create user message if we have content
+        user_message = None
+        if content_list:
+            user_message = Message(
+                id=message.id,
+                role="user",
+                content=content_list,
+                images=message_images if message_images else None,
+                timestamp=datetime.now(timezone.utc).isoformat(),
+                cache=message.cache,
+                assistant_message_id=message.assistant_message_id,
+            )
+            # Add to current conversation's messages
+            messages.append(user_message)
+            save_messages(conv_id, messages)
+            update_message_count(conv_id, len(messages))
 
-        # Add the user's message atomically
-        messages.append(user_message)
-        save_messages(conv_id, messages)
-        update_message_count(conv_id, len(messages))
+        # If we have a target_persona, handle special flow
+        if target_persona:
+            # Load metadata for target persona (conversation ID)
+            target_metadata = load_metadata(target_persona)
 
-        # Get system prompt if exists
-        system_content = ""
-        if metadata.system_prompt_id:
-            system_prompt = load_prompt(metadata.system_prompt_id)
-            if system_prompt.is_cached:
-                system_content = [
-                    {
-                        "type": "text",
-                        "text": system_prompt.content,
-                        "cache_control": {"type": "ephemeral"},
+            # Validate that target conversation has a system prompt
+            if not target_metadata.system_prompt_id:
+                raise HTTPException(
+                    status_code=400,
+                    detail="Target conversation must have a system prompt",
+                )
+
+            # Load system prompt to validate it exists
+            try:
+                target_system_prompt = load_prompt(target_metadata.system_prompt_id)
+            except HTTPException as e:
+                if e.status_code == 404:
+                    raise HTTPException(
+                        status_code=400,
+                        detail="Target conversation's system prompt not found",
+                    )
+                raise e
+
+            persona_name = target_metadata.persona_name or "Assistant"
+
+            # Get transcript of current conversation with no prefixes for assistant and user_name for user
+            transcript = await get_transcript(conv_id, None, metadata.user_name)
+
+            # Create a single message with the transcript and use system prompt in system argument
+            anthropic_messages = [
+                {
+                    "role": "user",
+                    "content": [{"type": "text", "text": transcript}],
+                }
+            ]
+
+            # Set system content to target's system prompt with cache control
+            system_content = [
+                {
+                    "type": "text",
+                    "text": target_system_prompt.content,
+                    "cache_control": {"type": "ephemeral"},
+                }
+            ]
+        else:
+            # Normal flow - convert messages to Anthropic format
+            anthropic_messages = []
+            for msg in messages:
+                if msg.content:
+                    message_content = []
+
+                    # Only include images for the current (last) message
+                    if msg.images and msg == messages[-1]:
+                        for img in msg.images:
+                            img_path = (
+                                get_images_dir(conv_id)
+                                / f"{img.id}{Path(img.filename).suffix}"
+                            )
+                            with open(img_path, "rb") as f:
+                                base64_data = base64.b64encode(f.read()).decode()
+                                message_content.append(
+                                    {
+                                        "type": "image",
+                                        "source": {
+                                            "type": "base64",
+                                            "media_type": img.media_type,
+                                            "data": base64_data,
+                                        },
+                                    }
+                                )
+
+                    # Add text content, prefixing with user name for user messages if available
+                    text_content = []
+                    for block in msg.content:
+                        if block["type"] == "text":
+                            text = block["text"]
+                            # Add user name prefix for user messages if available
+                            if msg.role == "user" and metadata.user_name:
+                                text = f"**{metadata.user_name}**: {text}"
+                            text_content.append({"type": "text", "text": text})
+                    message_content.extend(text_content)
+
+                    message_dict: MessageParam = {
+                        "role": "user" if msg.role == "user" else "assistant",
+                        "content": message_content,
                     }
-                ]
-            else:
-                system_content = system_prompt.content
+                    anthropic_messages.append(message_dict)
+            # Get system prompt if exists
+            system_content = None  # Initialize to None instead of empty string
+            if metadata.system_prompt_id:
+                system_prompt = load_prompt(metadata.system_prompt_id)
+                if system_prompt.is_cached:
+                    system_content = [
+                        {
+                            "type": "text",
+                            "text": system_prompt.content,
+                            "cache_control": {"type": "ephemeral"},
+                        }
+                    ]
+                else:
+                    system_content = system_prompt.content
 
         # Create Anthropic client with cache control enabled
         client = Anthropic()
         setattr(client, "_headers", {"anthropic-beta": "prompt-caching-2024-07-31"})
-
-        # Convert messages to Anthropic format with cache control and images
-        anthropic_messages: List[MessageParam] = []
-        for msg in messages:
-            if msg.content:
-                message_content = []
-
-                # Only include images for the current (last) message
-                if msg.images and msg == messages[-1]:
-                    for img in msg.images:
-                        img_path = (
-                            get_images_dir(conv_id)
-                            / f"{img.id}{Path(img.filename).suffix}"
-                        )
-                        with open(img_path, "rb") as f:
-                            base64_data = base64.b64encode(f.read()).decode()
-                            message_content.append(
-                                {
-                                    "type": "image",
-                                    "source": {
-                                        "type": "base64",
-                                        "media_type": img.media_type,
-                                        "data": base64_data,
-                                    },
-                                }
-                            )
-
-                # Add text content
-                message_content.extend(msg.content)
-
-                message_dict: MessageParam = {
-                    "role": "user" if msg.role == "user" else "assistant",
-                    "content": message_content,
-                }
-                anthropic_messages.append(message_dict)
 
         async def stream_response():
             """Stream the response from Claude."""
@@ -396,13 +437,17 @@ async def add_message(
 
             try:
                 # Get Claude's streaming response
-                stream = client.messages.create(
-                    model=metadata.model,
-                    max_tokens=metadata.max_tokens,
-                    system=system_content,
-                    messages=anthropic_messages,
-                    stream=True,
-                )
+                # Only include system parameter if we have system content
+                create_params = {
+                    "model": metadata.model,
+                    "max_tokens": metadata.max_tokens,
+                    "messages": anthropic_messages,
+                    "stream": True,
+                }
+                if system_content is not None:
+                    create_params["system"] = system_content
+
+                stream = client.messages.create(**create_params)
 
                 for chunk in stream:
                     event: Dict[str, Any] = {
@@ -427,7 +472,7 @@ async def add_message(
 
                         # Construct message event
                         event["message"] = {
-                            "id": user_message.assistant_message_id,
+                            "id": assistant_message_id,
                             "role": "assistant",
                             "usage": usage_data.model_dump() if usage_data else None,
                         }
@@ -440,6 +485,9 @@ async def add_message(
                         delta = getattr(chunk, "delta", None)
                         if delta and getattr(delta, "text", None):
                             delta_text = str(getattr(delta, "text", ""))
+                            # For target_persona responses, prefix with persona name
+                            if target_persona and not response_text:
+                                delta_text = f"**{persona_name}**: {delta_text}"
                             response_text = response_text + delta_text
                             event["delta"] = {
                                 "type": "text_delta",
@@ -464,10 +512,11 @@ async def add_message(
                 # Save the complete response atomically
                 if not assistant_message_saved:
                     assistant_message = Message(
-                        id=user_message.assistant_message_id,
+                        id=assistant_message_id,
                         role="assistant",
                         content=[{"type": "text", "text": response_text}],
                         usage=usage_data,
+                        timestamp=datetime.now(timezone.utc).isoformat(),
                     )
                     messages.append(assistant_message)
                     save_messages(conv_id, messages)
@@ -515,16 +564,32 @@ async def get_transcript(
     for message in messages:
         # Get appropriate prefix based on role
         prefix = None
-        if message.role == "assistant" and assistant_prefix:
-            prefix = assistant_prefix
+        if message.role == "assistant":
+            # Check if message already starts with a name prefix pattern
+            content_text = "\n\n".join(
+                str(block["text"])
+                for block in message.content
+                if block["type"] == "text"
+            )
+            has_name_prefix = (
+                content_text.startswith("**") and "**: " in content_text.split("\n")[0]
+            )
+
+            # Only add prefix if:
+            # 1. assistant_prefix is provided AND
+            # 2. Either it's not the default "Assistant" prefix OR message doesn't have a name prefix
+            if assistant_prefix and (
+                assistant_prefix != "Assistant" or not has_name_prefix
+            ):
+                prefix = assistant_prefix
         elif message.role == "user" and user_prefix:
             prefix = user_prefix
 
         content = "\n\n".join(
             str(block["text"])
-            .replace("_", "\\_")
-            .replace("*", "\\*")
-            .replace("`", "\\`")
+            # .replace("_", "\\_")
+            # .replace("*", "\\*")
+            # .replace("`", "\\`")
             for block in message.content
             if block["type"] == "text"
         )
