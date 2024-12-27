@@ -42,8 +42,13 @@ jiter==0.8.2
 pydantic==2.10.4
     # via anthropic
     # via fastapi
+    # via pydantic-settings
 pydantic-core==2.27.2
     # via pydantic
+pydantic-settings==2.7.0
+    # via claude
+python-dotenv==1.0.1
+    # via pydantic-settings
 python-multipart==0.0.20
     # via claude
 pyyaml==6.0.2

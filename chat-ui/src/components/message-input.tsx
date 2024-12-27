@@ -89,13 +89,9 @@ export const MessageInput = forwardRef<MessageInputHandle, MessageInputProps>(
     }, [onSend, loading, attachedImages, selectedPersona]);
 
     const handleCancel = useCallback(() => {
-      console.log("Cancel handler called");
       if (abortControllerRef.current) {
-        console.log("Aborting request...");
         abortControllerRef.current.abort();
         abortControllerRef.current = null;
-      } else {
-        console.log("No active abort controller found");
       }
     }, []);
 

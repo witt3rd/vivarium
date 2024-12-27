@@ -8,7 +8,7 @@ from typing import Any, Dict, List, cast
 import yaml
 from fastapi import HTTPException
 
-from ..storage import CONVERSATIONS_DIR
+from ..config import settings
 from .schema import ConversationMetadata, Message
 
 
@@ -46,7 +46,7 @@ def atomic_write_yaml(path: str, data: Dict[str, Any] | List[Any]) -> None:
 
 def ensure_conversations_dir(conv_id: str) -> str:
     """Ensure conversation directory exists and return its path."""
-    conversations_dir = os.path.join(CONVERSATIONS_DIR, conv_id)
+    conversations_dir = os.path.join(str(settings.conversations_dir), conv_id)
     if not os.path.exists(conversations_dir):
         os.makedirs(conversations_dir)
     return conversations_dir
@@ -87,7 +87,9 @@ def load_metadata(conv_id: str) -> ConversationMetadata:
 
 def load_messages(conv_id: str) -> List[Message]:
     """Load conversation messages."""
-    messages_path = os.path.join(CONVERSATIONS_DIR, conv_id, "messages.yaml")
+    messages_path = os.path.join(
+        str(settings.conversations_dir), conv_id, "messages.yaml"
+    )
     try:
         with open(messages_path, "r", encoding="utf-8") as f:
             raw_data = yaml.safe_load(f)
@@ -114,7 +116,7 @@ def rm_conversation(conv_id: str) -> None:
     save_metadata_index(all_metadata)
 
     # Delete conversation directory if it exists
-    conversations_dir = os.path.join(CONVERSATIONS_DIR, conv_id)
+    conversations_dir = os.path.join(str(settings.conversations_dir), conv_id)
     try:
         import shutil
 
@@ -151,7 +153,7 @@ def file_lock(path: str):
 
 def save_metadata_index(metadata_list: List[ConversationMetadata]) -> None:
     """Save all conversation metadata to a single index file."""
-    index_path = os.path.join(CONVERSATIONS_DIR, "_metadata.yaml")
+    index_path = os.path.join(str(settings.conversations_dir), "_metadata.yaml")
 
     with file_lock(index_path):
         try:
@@ -162,7 +164,7 @@ def save_metadata_index(metadata_list: List[ConversationMetadata]) -> None:
 
 def load_metadata_index() -> List[ConversationMetadata]:
     """Load all conversation metadata from the index file."""
-    index_path = os.path.join(CONVERSATIONS_DIR, "_metadata.yaml")
+    index_path = os.path.join(str(settings.conversations_dir), "_metadata.yaml")
 
     with file_lock(index_path):
         try:
@@ -177,9 +179,9 @@ def load_metadata_index() -> List[ConversationMetadata]:
                     if "audio_enabled" not in item or item["audio_enabled"] is None:
                         item["audio_enabled"] = False
                     if "model" not in item:
-                        item["model"] = "claude-3-5-sonnet-20241022"
+                        item["model"] = settings.default_model
                     if "max_tokens" not in item:
-                        item["max_tokens"] = 8192
+                        item["max_tokens"] = settings.default_max_tokens
                     if "message_count" not in item:
                         item["message_count"] = 0
                     if "tags" not in item:

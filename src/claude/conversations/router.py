@@ -21,6 +21,7 @@ from anthropic.types import MessageParam
 from fastapi import APIRouter, File, Form, HTTPException, Query, Request, UploadFile
 from fastapi.responses import FileResponse, StreamingResponse
 
+from ..config import settings
 from ..system_prompts.schema import SystemPrompt
 from ..system_prompts.storage import load_prompt, save_prompt
 from .schema import (
@@ -33,7 +34,6 @@ from .schema import (
     TokenUsage,
 )
 from .storage import (
-    CONVERSATIONS_DIR,
     list_metadata,
     load_messages,
     load_metadata,
@@ -49,7 +49,7 @@ active_streams: Dict[str, Any] = {}
 
 def get_images_dir(conv_id: str) -> Path:
     """Get the images directory for a conversation."""
-    conv_dir = Path(CONVERSATIONS_DIR) / conv_id / "images"
+    conv_dir = Path(settings.conversations_dir) / conv_id / "images"
     conv_dir.mkdir(parents=True, exist_ok=True)
     return conv_dir
 
@@ -312,7 +312,8 @@ async def add_message(
                             media_type=media_type,
                         )
                     )
-                except Exception:
+                except Exception as e:
+                    print(f"Error processing file {filename}: {str(e)}")
                     raise
 
         # Create user message if we have content
@@ -461,7 +462,6 @@ async def add_message(
                 for chunk in stream:
                     # Check if client has disconnected
                     if await request.is_disconnected():
-                        print("Client disconnected, stopping stream")
                         if (
                             stream
                             and hasattr(stream, "close")
