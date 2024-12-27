@@ -189,14 +189,6 @@ export function Conversation({
       abortController: AbortController,
       files?: File[]
     ) => {
-      console.log("handleSend called with:", {
-        messageText,
-        targetPersonaId,
-        hasFiles: files ? true : false,
-        fileCount: files?.length,
-        files,
-      });
-
       if (!currentId || (!messageText.trim() && !targetPersonaId)) return;
 
       try {
@@ -267,27 +259,13 @@ export function Conversation({
 
         // Append files with their new filenames
         if (imageMetadata) {
-          console.log(
-            `Preparing to upload ${imageMetadata.length} files:`,
-            imageMetadata
-          );
           imageMetadata.forEach(({ filename, originalFile }) => {
-            console.log(`Creating new File for ${filename}:`, {
-              type: originalFile.type,
-              size: originalFile.size,
-            });
             // Create a new File object with the UUID filename
             const renamedFile = new File([originalFile], filename, {
               type: originalFile.type,
             });
             formData.append("files", renamedFile);
           });
-
-          // Log the FormData contents
-          console.log("FormData contents:");
-          for (const pair of formData.entries()) {
-            console.log(pair[0], pair[1]);
-          }
         }
 
         // Create assistant message placeholder
