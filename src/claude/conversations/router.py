@@ -16,6 +16,7 @@ from typing import (
     cast,
 )
 
+import yaml
 from anthropic import Anthropic
 from anthropic.types import MessageParam
 from fastapi import APIRouter, File, Form, HTTPException, Query, Request, UploadFile
@@ -365,7 +366,12 @@ async def add_message(
             anthropic_messages = [
                 {
                     "role": "user",
-                    "content": [{"type": "text", "text": transcript}],
+                    "content": [
+                        {
+                            "type": "text",
+                            "text": f"I am currently participating in a group conversation:\n\n[BEGIN GROUP CONVERSATION]\n\n{transcript}[END GROUP CONVERSATION]\n\nI will respond to this conversation, as {persona_name}, consistent with my beliefs, ethics, morals, and unique perspective in order to advance the group's shared understanding and goals:",
+                        }
+                    ],
                 }
             ]
 
@@ -438,6 +444,27 @@ async def add_message(
         # Create Anthropic client with cache control enabled
         client = Anthropic()
         setattr(client, "_headers", {"anthropic-beta": "prompt-caching-2024-07-31"})
+
+        # Dump request parameters to debug file
+        debug_dir = Path(settings.debug_dir)
+        debug_dir.mkdir(parents=True, exist_ok=True)
+        debug_file = debug_dir / f"{assistant_message_id}.yaml"
+
+        debug_data = {
+            "model": metadata.model,
+            "max_tokens": metadata.max_tokens,
+            "messages": anthropic_messages,
+            "system": system_content,
+        }
+
+        with open(debug_file, "w", encoding="utf-8") as f:
+            yaml.safe_dump(
+                debug_data,
+                f,
+                default_flow_style=False,
+                allow_unicode=True,
+                sort_keys=False,
+            )
 
         async def stream_response():
             """Stream the response from Claude."""

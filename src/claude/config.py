@@ -17,6 +17,9 @@ class Settings(BaseSettings):
     system_prompts_dir: Path = Field(
         default=Path("data/system_prompts"), description="Directory for system prompts"
     )
+    debug_dir: Path = Field(
+        default=Path("data/debug"), description="Directory for debug data"
+    )
 
     # Model Configuration
     default_model: str = Field(
