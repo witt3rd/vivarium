@@ -1,4 +1,4 @@
-@import url("https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&display=swap");
+@import url("https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&family=JetBrains+Mono:wght@300;400;500;700&display=swap");
 
 @tailwind base;
 @tailwind components;
@@ -6,47 +6,48 @@
 
 @layer base {
   :root {
-    --background: 0 0% 100%;
-    --foreground: 240 10% 3.9%;
-    --card: 0 0% 100%;
-    --card-foreground: 240 10% 3.9%;
-    --popover: 0 0% 100%;
-    --popover-foreground: 240 10% 3.9%;
-    --primary: 240 5.9% 10%;
-    --primary-foreground: 0 0% 98%;
-    --secondary: 240 4.8% 95.9%;
-    --secondary-foreground: 240 5.9% 10%;
-    --muted: 240 4.8% 95.9%;
-    --muted-foreground: 240 3.8% 46.1%;
-    --accent: 240 4.8% 95.9%;
-    --accent-foreground: 240 5.9% 10%;
-    --destructive: 0 84.2% 60.2%;
-    --destructive-foreground: 0 0% 98%;
-    --border: 240 5.9% 90%;
-    --input: 240 5.9% 90%;
-    --ring: 240 5.9% 10%;
-    --radius: 0.25rem;
+    --background: 220 70% 2%;
+    --foreground: 180 100% 90%;
+    --card: 220 70% 3%;
+    --card-foreground: 180 100% 90%;
+    --popover: 220 70% 3%;
+    --popover-foreground: 180 100% 90%;
+    --primary: 180 100% 50%;
+    --primary-foreground: 220 70% 2%;
+    --secondary: 120 100% 40%;
+    --secondary-foreground: 220 70% 2%;
+    --muted: 220 70% 8%;
+    --muted-foreground: 180 30% 70%;
+    --accent: 180 100% 45%;
+    --accent-foreground: 220 70% 2%;
+    --destructive: 0 100% 50%;
+    --destructive-foreground: 220 70% 2%;
+    --border: 180 100% 20%;
+    --input: 220 70% 8%;
+    --ring: 180 100% 50%;
+    --radius: 0.125rem;
   }
+
   .dark {
-    --background: 240 10% 3.9%;
-    --foreground: 0 0% 98%;
-    --card: 240 10% 3.9%;
-    --card-foreground: 0 0% 98%;
-    --popover: 240 10% 3.9%;
-    --popover-foreground: 0 0% 98%;
-    --primary: 0 0% 98%;
-    --primary-foreground: 240 5.9% 10%;
-    --secondary: 240 3.7% 15.9%;
-    --secondary-foreground: 0 0% 98%;
-    --muted: 240 3.7% 15.9%;
-    --muted-foreground: 240 5% 64.9%;
-    --accent: 240 3.7% 15.9%;
-    --accent-foreground: 0 0% 98%;
-    --destructive: 0 62.8% 30.6%;
-    --destructive-foreground: 0 0% 98%;
-    --border: 240 3.7% 15.9%;
-    --input: 240 3.7% 15.9%;
-    --ring: 240 4.9% 83.9%;
+    --background: 220 70% 2%;
+    --foreground: 180 100% 90%;
+    --card: 220 70% 3%;
+    --card-foreground: 180 100% 90%;
+    --popover: 220 70% 3%;
+    --popover-foreground: 180 100% 90%;
+    --primary: 180 100% 50%;
+    --primary-foreground: 220 70% 2%;
+    --secondary: 120 100% 40%;
+    --secondary-foreground: 220 70% 2%;
+    --muted: 220 70% 8%;
+    --muted-foreground: 180 30% 70%;
+    --accent: 180 100% 45%;
+    --accent-foreground: 220 70% 2%;
+    --destructive: 0 100% 50%;
+    --destructive-foreground: 220 70% 2%;
+    --border: 180 100% 20%;
+    --input: 220 70% 8%;
+    --ring: 180 100% 50%;
   }
 }
 
@@ -56,5 +57,96 @@
   }
   body {
     @apply bg-background text-foreground m-0;
+  }
+  code,
+  pre {
+    font-family: "JetBrains Mono", monospace;
+  }
+}
+
+/* Add retro CRT effect */
+.crt::before {
+  content: " ";
+  display: block;
+  position: fixed;
+  top: 0;
+  left: 0;
+  bottom: 0;
+  right: 0;
+  background: linear-gradient(
+    to bottom,
+    rgba(18, 16, 16, 0) 50%,
+    rgba(0, 0, 0, 0.25) 50%
+  );
+  background-size: 100% 4px;
+  z-index: 2;
+  pointer-events: none;
+  animation: flicker 0s infinite;
+  opacity: 0.15;
+}
+
+@keyframes flicker {
+  0% {
+    opacity: 0.27861;
+  }
+  5% {
+    opacity: 0.34769;
+  }
+  10% {
+    opacity: 0.23604;
+  }
+  15% {
+    opacity: 0.90626;
+  }
+  20% {
+    opacity: 0.18128;
+  }
+  25% {
+    opacity: 0.83891;
+  }
+  30% {
+    opacity: 0.65583;
+  }
+  35% {
+    opacity: 0.67807;
+  }
+  40% {
+    opacity: 0.26559;
+  }
+  45% {
+    opacity: 0.84693;
+  }
+  50% {
+    opacity: 0.96019;
+  }
+  55% {
+    opacity: 0.08594;
+  }
+  60% {
+    opacity: 0.20313;
+  }
+  65% {
+    opacity: 0.71988;
+  }
+  70% {
+    opacity: 0.53455;
+  }
+  75% {
+    opacity: 0.37288;
+  }
+  80% {
+    opacity: 0.71428;
+  }
+  85% {
+    opacity: 0.70419;
+  }
+  90% {
+    opacity: 0.7003;
+  }
+  95% {
+    opacity: 0.36108;
+  }
+  100% {
+    opacity: 0.24387;
   }
 }

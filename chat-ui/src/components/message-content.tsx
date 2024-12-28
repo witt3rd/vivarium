@@ -27,7 +27,7 @@ interface CodeBlockProps {
   language?: string;
 }
 
-function CodeBlock({ children, className, language }: CodeBlockProps) {
+const CodeBlock = ({ children, className, language }: CodeBlockProps) => {
   const handleCopy = async () => {
     await navigator.clipboard.writeText(
       typeof children === "string" ? children : ""
@@ -44,19 +44,35 @@ function CodeBlock({ children, className, language }: CodeBlockProps) {
       >
         <Copy className="h-3 w-3" />
       </Button>
-      <pre className={cn("mt-2", className)}>
-        <code className={language}>{children}</code>
+      <pre
+        className={cn(
+          "mt-2 font-mono text-primary border border-border bg-muted p-3 rounded-sm",
+          className
+        )}
+      >
+        <code className={cn("text-primary", language)}>{children}</code>
       </pre>
     </div>
   );
-}
+};
+
+const Pre = ({ children, ...props }: { children: React.ReactNode }) => (
+  <pre {...props} className="font-mono">
+    {children}
+  </pre>
+);
+
+const Paragraph = ({ children, ...props }: { children: React.ReactNode }) => (
+  <div {...props}>{children}</div>
+);
 
 export function MessageContent({ content }: MessageContentProps) {
   const [reactContent, setMarkdownSource] = useRemark({
     rehypeReactOptions: {
       components: {
-        code: CodeBlock,
-        p: ({ children, ...props }) => <div {...props}>{children}</div>,
+        code: CodeBlock as any,
+        pre: Pre as any,
+        p: Paragraph as any,
       },
     },
     onError: (err) => console.error("Error parsing markdown:", err),

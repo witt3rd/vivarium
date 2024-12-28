@@ -282,18 +282,20 @@ export function ConversationHistory({
                   <div
                     key={conv.id}
                     className={cn(
-                      "flex items-center gap-1 hover:bg-accent py-0.5 px-2",
-                      selectedId === conv.id ? "bg-accent" : ""
+                      "flex items-center gap-1 hover:bg-muted py-0.5 px-2 cursor-pointer",
+                      selectedId === conv.id
+                        ? "bg-muted text-primary"
+                        : "text-foreground"
                     )}
                   >
                     <div
-                      className="min-w-0 flex-1 cursor-pointer"
+                      className="min-w-0 flex-1"
                       onClick={() => handleSelect(conv)}
                     >
-                      <div className="text-2xs truncate">
+                      <div className="text-2xs font-mono truncate">
                         {conv.name || "Untitled"}
                       </div>
-                      <div className="text-3xs text-muted-foreground flex items-center gap-2">
+                      <div className="font-mono text-3xs text-muted-foreground/70 flex items-center gap-2">
                         <span>{conv.message_count} messages</span>
                         {conv.tags && conv.tags.length > 0 && (
                           <span>{conv.tags.length} tags</span>

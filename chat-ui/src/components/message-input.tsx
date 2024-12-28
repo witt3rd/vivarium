@@ -12,6 +12,7 @@ import {
 } from "@/components/ui/command";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { SmallTextarea } from "@/components/ui/small-inputs";
+import { cn } from "@/lib/utils";
 import { Image, Loader2, Send, X } from "lucide-react";
 import {
   forwardRef,
@@ -268,12 +269,16 @@ export const MessageInput = forwardRef<MessageInputHandle, MessageInputProps>(
                           <CommandItem
                             key={conv.id}
                             onSelect={() => setSelectedPersona(conv)}
-                            className="text-2xs cursor-pointer"
-                            data-state={
-                              selectedPersona?.id === conv.id ? "selected" : ""
-                            }
+                            className={cn(
+                              "text-2xs cursor-pointer hover:bg-muted",
+                              selectedPersona?.id === conv.id
+                                ? "bg-muted text-primary"
+                                : "text-foreground"
+                            )}
                           >
-                            {conv.persona_name}
+                            <div className="font-mono truncate">
+                              {conv.persona_name}
+                            </div>
                           </CommandItem>
                         ))}
                     </CommandGroup>

@@ -1173,7 +1173,7 @@ export function Conversation({
                         : "No Conversation Selected"}
                     </CardTitle>
                     {currentId && (
-                      <div className="text-2xs pt-0.5 text-muted-foreground truncate">
+                      <div className="text-3xs pt-0.5 text-muted-foreground/70 font-mono truncate">
                         {currentId}
                       </div>
                     )}

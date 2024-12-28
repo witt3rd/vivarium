@@ -26,6 +26,7 @@ module.exports = {
         "Roboto",
         "sans-serif",
       ],
+      mono: ["JetBrains Mono", "monospace"],
     },
     extend: {
       fontSize: {
@@ -42,21 +43,25 @@ module.exports = {
               fontSize: "1.25rem",
               lineHeight: "1.75rem",
               fontWeight: 500, // Medium weight for headings
+              fontFamily: "JetBrains Mono, monospace",
             },
             h2: {
               fontSize: "1.125rem",
               lineHeight: "1.5rem",
               fontWeight: 500,
+              fontFamily: "JetBrains Mono, monospace",
             },
             h3: {
               fontSize: "1rem",
               lineHeight: "1.5rem",
               fontWeight: 500,
+              fontFamily: "JetBrains Mono, monospace",
             },
             h4: {
               fontSize: "0.875rem",
               lineHeight: "1.25rem",
               fontWeight: 500,
+              fontFamily: "JetBrains Mono, monospace",
             },
             p: {
               marginTop: "0.75rem",
@@ -65,10 +70,16 @@ module.exports = {
             },
             strong: {
               fontWeight: 500,
+              color: "hsl(var(--primary))",
             },
             code: {
               fontSize: "0.75rem",
               fontWeight: 400,
+              fontFamily: "JetBrains Mono, monospace",
+              color: "hsl(var(--primary))",
+              backgroundColor: "hsl(var(--muted))",
+              padding: "0.2em 0.4em",
+              borderRadius: "0.125rem",
             },
             "code::before": {
               content: '""',
@@ -79,10 +90,14 @@ module.exports = {
             pre: {
               fontSize: "0.75rem",
               lineHeight: "1rem",
-              padding: "0.5rem",
+              padding: "0.75rem",
               marginTop: "0.5rem",
               marginBottom: "0.5rem",
               fontWeight: 400,
+              fontFamily: "JetBrains Mono, monospace",
+              backgroundColor: "hsl(var(--muted))",
+              border: "1px solid hsl(var(--border))",
+              borderRadius: "0.125rem",
             },
           },
         },

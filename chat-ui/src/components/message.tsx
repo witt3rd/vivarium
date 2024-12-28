@@ -349,7 +349,7 @@ export function MessageComponent({
                 </div>
               )}
               {message.role === "assistant" && message.usage && (
-                <div className="text-3xs text-muted-foreground/70 mt-2 flex gap-4">
+                <div className="font-mono text-3xs text-muted-foreground/70 mt-2 flex gap-4">
                   <span>Input: {message.usage.input_tokens}</span>
                   <span>
                     Cache Created:{" "}
