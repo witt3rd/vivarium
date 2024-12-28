@@ -5,6 +5,7 @@ import { ConversationsService } from "@/api/services/ConversationsService";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { Button } from "@/components/ui/button";
 import { Toaster } from "@/components/ui/toaster";
+import { cn } from "@/lib/utils";
 import {
   DndContext,
   DragEndEvent,
@@ -108,7 +109,12 @@ export default function App() {
   }, []);
 
   return (
-    <div className="h-screen flex flex-col bg-background crt">
+    <div
+      className={cn(
+        "h-screen flex flex-col bg-background crt",
+        isFullscreen && "h-[100dvh]"
+      )}
+    >
       <Toaster />
       <div className="flex-none flex justify-between items-center p-2">
         <h1 className="font-mono text-primary text-xl tracking-wider font-bold uppercase">
@@ -140,31 +146,34 @@ export default function App() {
           <ThemeToggle />
         </div>
       </div>
-      <main className="flex-1 overflow-x-auto">
-        <DndContext sensors={sensors} onDragEnd={handleDragEnd}>
-          <div
-            className="flex gap-4 p-2 min-h-0 h-full"
-            style={{ width: `max(100%, ${panels.length * 900}px)` }}
-          >
-            <SortableContext
-              items={panels}
-              strategy={horizontalListSortingStrategy}
+
+      <div className="flex-1 relative">
+        <div className="absolute inset-0 overflow-x-auto overflow-y-hidden">
+          <DndContext sensors={sensors} onDragEnd={handleDragEnd}>
+            <div
+              className="flex gap-4 p-2 h-full"
+              style={{ width: `max(100%, ${panels.length * 900}px)` }}
             >
-              {panels.map((id) => (
-                <div key={id} className="flex-1 min-w-[900px]">
-                  <Conversation
-                    id={id}
-                    conversations={conversations}
-                    onConversationsChange={handleConversationsChange}
-                    onRemove={handleClosePanel}
-                    showCloseButton={panels.length > 1}
-                  />
-                </div>
-              ))}
-            </SortableContext>
-          </div>
-        </DndContext>
-      </main>
+              <SortableContext
+                items={panels}
+                strategy={horizontalListSortingStrategy}
+              >
+                {panels.map((id) => (
+                  <div key={id} className="flex-1 min-w-[900px]">
+                    <Conversation
+                      id={id}
+                      conversations={conversations}
+                      onConversationsChange={handleConversationsChange}
+                      onRemove={handleClosePanel}
+                      showCloseButton={panels.length > 1}
+                    />
+                  </div>
+                ))}
+              </SortableContext>
+            </div>
+          </DndContext>
+        </div>
+      </div>
     </div>
   );
 }
