@@ -298,7 +298,10 @@ export function ConversationHistory({
                       <div className="font-mono text-3xs text-muted-foreground/70 flex items-center gap-2">
                         <span>{conv.message_count} messages</span>
                         {conv.tags && conv.tags.length > 0 && (
-                          <span>{conv.tags.length} tags</span>
+                          <span>
+                            {conv.tags.length}{" "}
+                            {conv.tags.length === 1 ? "tag" : "tags"}
+                          </span>
                         )}
                       </div>
                     </div>

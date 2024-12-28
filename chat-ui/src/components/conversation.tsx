@@ -1533,6 +1533,7 @@ export function Conversation({
                                       .toLowerCase()
                                       .includes(tagInput.toLowerCase())
                                 )
+                                .sort((a, b) => a.localeCompare(b))
                                 .map((tag) => (
                                   <CommandItem
                                     key={tag}
@@ -1558,19 +1559,21 @@ export function Conversation({
 
                   <ScrollArea className="flex-1">
                     <div className="flex gap-1 items-center flex-wrap py-1 px-2">
-                      {currentMetadata?.tags?.map((tag) => (
-                        <Badge
-                          variant="secondary"
-                          key={tag}
-                          className="text-2xs py-0 h-5"
-                        >
-                          {tag}
-                          <X
-                            className="h-3 w-3 ml-1 cursor-pointer"
-                            onClick={() => handleTagRemove(tag)}
-                          />
-                        </Badge>
-                      ))}
+                      {currentMetadata?.tags
+                        ?.sort((a, b) => a.localeCompare(b))
+                        .map((tag) => (
+                          <Badge
+                            variant="secondary"
+                            key={tag}
+                            className="text-2xs py-0 h-5"
+                          >
+                            {tag}
+                            <X
+                              className="h-3 w-3 ml-1 cursor-pointer"
+                              onClick={() => handleTagRemove(tag)}
+                            />
+                          </Badge>
+                        ))}
                     </div>
                   </ScrollArea>
                 </div>
