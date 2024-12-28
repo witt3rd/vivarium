@@ -18,8 +18,8 @@ import {
   arrayMove,
   horizontalListSortingStrategy,
 } from "@dnd-kit/sortable";
-import { Plus } from "lucide-react";
-import { useEffect, useState } from "react";
+import { Maximize2, Minimize2, Plus } from "lucide-react";
+import { useCallback, useEffect, useState } from "react";
 import { Conversation } from "./components/conversation";
 
 export default function App() {
@@ -27,6 +27,7 @@ export default function App() {
     []
   );
   const [panels, setPanels] = useState<string[]>(["main"]);
+  const [isFullscreen, setIsFullscreen] = useState(false);
 
   const mouseSensor = useSensor(MouseSensor, {
     activationConstraint: {
@@ -87,6 +88,25 @@ export default function App() {
     );
   };
 
+  const toggleFullscreen = useCallback(() => {
+    if (!document.fullscreenElement) {
+      document.documentElement.requestFullscreen();
+      setIsFullscreen(true);
+    } else {
+      document.exitFullscreen();
+      setIsFullscreen(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    const handleFullscreenChange = () => {
+      setIsFullscreen(!!document.fullscreenElement);
+    };
+    document.addEventListener("fullscreenchange", handleFullscreenChange);
+    return () =>
+      document.removeEventListener("fullscreenchange", handleFullscreenChange);
+  }, []);
+
   return (
     <div className="h-screen flex flex-col bg-background crt">
       <Toaster />
@@ -103,6 +123,19 @@ export default function App() {
             title="Add new panel"
           >
             <Plus className="text-muted-foreground scale-75 transform" />
+          </Button>
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={toggleFullscreen}
+            className="h-5 w-5"
+            title={isFullscreen ? "Exit fullscreen" : "Enter fullscreen"}
+          >
+            {isFullscreen ? (
+              <Minimize2 className="text-muted-foreground scale-75 transform" />
+            ) : (
+              <Maximize2 className="text-muted-foreground scale-75 transform" />
+            )}
           </Button>
           <ThemeToggle />
         </div>
