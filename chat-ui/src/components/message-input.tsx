@@ -240,7 +240,7 @@ export const MessageInput = forwardRef<MessageInputHandle, MessageInputProps>(
                 </div>
               )}
             </div>
-            <div className="w-64 flex flex-col gap-2">
+            <div className="w-36 flex flex-col gap-2">
               <Command className="rounded-lg border shadow-md">
                 <CommandInput
                   placeholder="Search personas..."

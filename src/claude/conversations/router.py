@@ -778,14 +778,47 @@ async def create_system_prompt_from_transcript(
         assistant_prefix: Custom prefix for assistant messages, None to omit
         user_prefix: Custom prefix for user messages, None to omit
     """
+    # Get metadata to check for existing system prompt
+    metadata = load_metadata(conv_id)
+    existing_content = ""
+
+    # If there's an existing system prompt, load it
+    if metadata.system_prompt_id:
+        existing_prompt = load_prompt(metadata.system_prompt_id)
+        existing_content = existing_prompt.content
+
     # Get transcript with specified prefixes
     transcript = await get_transcript(conv_id, assistant_prefix, user_prefix)
+
+    # Define wrapper text
+    begin_wrapper = "[BEGIN GROUP CONVERSATION]"
+    end_wrapper = "[END GROUP CONVERSATION]"
+
+    # Determine the final content based on existing system prompt
+    if existing_content:
+        # Check if existing content already has wrapper text
+        if begin_wrapper in existing_content and end_wrapper in existing_content:
+            # Insert transcript before the end wrapper
+            end_index = existing_content.rindex(end_wrapper)
+            content = (
+                existing_content[:end_index].rstrip()
+                + "\n\n"
+                + transcript
+                + "\n\n"
+                + existing_content[end_index:]
+            )
+        else:
+            # Add wrapper text around both existing content and transcript
+            content = f"{existing_content}\n\n{begin_wrapper}\n\n{transcript}\n\n{end_wrapper}"
+    else:
+        # No existing content, just wrap the transcript
+        content = f"{begin_wrapper}\n\n{transcript}\n\n{end_wrapper}"
 
     # Create new system prompt
     system_prompt = SystemPrompt(
         id=conv_id,  # Use conversation ID as the system prompt ID to override any existing prompt
         name=name,
-        content=transcript,
+        content=content,
         description="Generated from conversation transcript",
         is_cached=False,
     )

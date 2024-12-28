@@ -6,10 +6,23 @@ import { MetadataCreate } from "@/api/models/MetadataCreate";
 import { SystemPrompt } from "@/api/models/SystemPrompt";
 import { ConversationsService } from "@/api/services/ConversationsService";
 import { SystemPromptsService } from "@/api/services/SystemPromptsService";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
+import {
+  Command,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from "@/components/ui/command";
 import { Input } from "@/components/ui/input";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import {
   Select,
@@ -23,6 +36,7 @@ import { sortConversations } from "@/lib/conversation-sort";
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import {
+  Check,
   ChevronsDown,
   ChevronsUp,
   Download,
@@ -37,6 +51,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { ConversationHistory } from "./conversation-history";
 import { MessageComponent } from "./message";
 import { MessageInput, MessageInputHandle } from "./message-input";
+import { SmallInput } from "./ui/small-inputs";
 
 // Define a type for the voice category
 const categoryOrder: Record<string, number> = {
@@ -112,6 +127,11 @@ export function Conversation({
   const personaNameDebounceRef = useRef<NodeJS.Timeout>();
   const userNameDebounceRef = useRef<NodeJS.Timeout>();
 
+  // Tag management state
+  const [allTags, setAllTags] = useState<string[]>([]);
+  const [tagInput, setTagInput] = useState("");
+  const [isTagPopoverOpen, setIsTagPopoverOpen] = useState(false);
+
   // Initialize local state when metadata changes
   useEffect(() => {
     if (currentMetadata) {
@@ -119,6 +139,76 @@ export function Conversation({
       setLocalUserName(currentMetadata.user_name ?? "");
     }
   }, [currentMetadata?.id]); // Only update when conversation changes
+
+  // Load all available tags
+  useEffect(() => {
+    ConversationsService.listTagsApiConversationsTagsGet()
+      .then(setAllTags)
+      .catch((error) => {
+        console.error("Error loading tags:", error);
+        setError("Failed to load tags");
+      });
+  }, []);
+
+  const handleTagSelect = async (tag: string) => {
+    if (!currentId || !currentMetadata) return;
+
+    // Create new tags array with the selected tag if not already present
+    const newTags = currentMetadata.tags
+      ? currentMetadata.tags.includes(tag)
+        ? currentMetadata.tags
+        : [...currentMetadata.tags, tag]
+      : [tag];
+
+    try {
+      const updated =
+        await ConversationsService.updateMetadataApiConversationsConvIdMetadataPut(
+          currentId,
+          {
+            ...currentMetadata,
+            tags: newTags,
+          }
+        );
+      onConversationsChange(
+        conversations.map((c) => (c.id === currentId ? updated : c))
+      );
+
+      // Update allTags if this is a new tag
+      if (!allTags.includes(tag)) {
+        setAllTags((prev) => [...prev, tag]);
+      }
+    } catch (error) {
+      console.error("Error updating tags:", error);
+      setError("Failed to update tags");
+    }
+  };
+
+  const handleTagRemove = async (tagToRemove: string) => {
+    if (!currentId || !currentMetadata || !currentMetadata.tags) return;
+
+    try {
+      const updated =
+        await ConversationsService.updateMetadataApiConversationsConvIdMetadataPut(
+          currentId,
+          {
+            ...currentMetadata,
+            tags: currentMetadata.tags.filter((tag) => tag !== tagToRemove),
+          }
+        );
+      onConversationsChange(
+        conversations.map((c) => (c.id === currentId ? updated : c))
+      );
+    } catch (error) {
+      console.error("Error removing tag:", error);
+      setError("Failed to remove tag");
+    }
+  };
+
+  const handleTagCreate = async (newTag: string) => {
+    if (!newTag.trim()) return;
+    await handleTagSelect(newTag.trim());
+    setTagInput("");
+  };
 
   const fetchVoices = useCallback(async () => {
     if (voices.length > 0 || loadingVoices || fetchError) return; // Use cached voices if available, if already loading, or if there's an error
@@ -1083,7 +1173,7 @@ export function Conversation({
                         : "No Conversation Selected"}
                     </CardTitle>
                     {currentId && (
-                      <div className="text-3xs pt-0.5 text-muted-foreground truncate">
+                      <div className="text-2xs pt-0.5 text-muted-foreground truncate">
                         {currentId}
                       </div>
                     )}
@@ -1158,218 +1248,333 @@ export function Conversation({
           </CardHeader>
 
           <CardContent className="px-2 pt-2 flex-1 flex flex-col space-y-4 min-h-0 min-w-0">
-            <div className="p-0 flex gap-2 items-center">
-              <Select
-                value={currentConversation?.system_prompt_id || "none"}
-                onValueChange={(value: string) =>
-                  handleSystemPromptChange(value === "none" ? null : value)
-                }
-              >
-                <SelectTrigger className="h-5 text-2xs flex-shrink-0 w-48">
-                  <SelectValue placeholder="Select System Prompt" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="none" className="text-2xs">
-                    No System Prompt
-                  </SelectItem>
-                  {systemPrompts
-                    .sort((a, b) => a.name.localeCompare(b.name))
-                    .map((prompt) => (
-                      <SelectItem
-                        key={prompt.id}
-                        value={prompt.id}
-                        className="text-2xs"
-                      >
-                        {prompt.name}
+            <div className="p-0 flex flex-col gap-2">
+              {/* First Row: Core Settings */}
+              <div className="flex flex-wrap items-center divide-x">
+                {/* System Prompt Controls */}
+                <div className="flex items-center gap-2 min-w-[200px] pr-4 py-2">
+                  <Select
+                    value={currentConversation?.system_prompt_id || "none"}
+                    onValueChange={(value: string) =>
+                      handleSystemPromptChange(value === "none" ? null : value)
+                    }
+                  >
+                    <SelectTrigger className="h-7 text-2xs">
+                      <SelectValue placeholder="Select System Prompt" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none" className="text-2xs">
+                        No System Prompt
                       </SelectItem>
-                    ))}
-                </SelectContent>
-              </Select>
-              <Button
-                variant="ghost"
-                size="icon"
-                onClick={handleNewSystemPrompt}
-                className="h-5 w-5"
-                title="Create new system prompt"
-              >
-                <Plus className="text-muted-foreground scale-75 transform" />
-              </Button>
-              <Button
-                variant="ghost"
-                size="icon"
-                onClick={handleCreateSystemPromptFromTranscript}
-                className="h-5 w-5"
-                title="Create system prompt from conversation"
-              >
-                <FileText className="text-muted-foreground scale-75 transform" />
-              </Button>
-              <div className="flex items-center gap-2 scale-75 transform">
-                <label
-                  htmlFor="persona-name"
-                  className="text-2xs font-medium text-muted-foreground/70 cursor-pointer select-none"
-                >
-                  Persona Name
-                </label>
-                <Input
-                  id="persona-name"
-                  value={localPersonaName}
-                  onChange={(e) => handlePersonaNameChange(e.target.value)}
-                  placeholder="Assistant"
-                  className="h-5 text-2xs w-32"
-                />
-              </div>
-              <div className="flex items-center gap-2 scale-75 transform">
-                <label
-                  htmlFor="user-name"
-                  className="text-2xs font-medium text-muted-foreground/70 cursor-pointer select-none"
-                >
-                  User Name
-                </label>
-                <Input
-                  id="user-name"
-                  value={localUserName}
-                  onChange={(e) => handleUserNameChange(e.target.value)}
-                  placeholder="User"
-                  className="h-5 text-2xs w-32"
-                />
-              </div>
-              <div className="flex-1" />
-              <div className="flex items-center gap-2 scale-75 transform">
-                <Checkbox
-                  id="audio-enabled"
-                  checked={audioEnabled}
-                  onCheckedChange={(checked) => {
-                    const isChecked = checked === true;
-                    // If enabling TTS and no voice is selected, select the first available voice
-                    const newVoiceId =
-                      isChecked && !selectedVoiceId && voices.length > 0
-                        ? voices[0].voice_id
-                        : selectedVoiceId;
-
-                    setAudioEnabled(isChecked);
-                    if (newVoiceId !== selectedVoiceId) {
-                      setSelectedVoiceId(newVoiceId);
-                    }
-
-                    if (currentId && currentMetadata) {
-                      const newMetadata = {
-                        ...currentMetadata,
-                        audio_enabled: isChecked,
-                        voice_id: newVoiceId,
-                      };
-                      ConversationsService.updateMetadataApiConversationsConvIdMetadataPut(
-                        currentId,
-                        newMetadata
-                      )
-                        .then((updated) => {
-                          onConversationsChange(
-                            conversations.map((c) =>
-                              c.id === currentId ? updated : c
-                            )
-                          );
-                        })
-                        .catch((error) => {
-                          console.error(
-                            "Error updating audio settings:",
-                            error
-                          );
-                          setError("Failed to update audio settings");
-                          // Revert the local state on error
-                          setAudioEnabled(
-                            currentConversation?.audio_enabled ?? false
-                          );
-                          setSelectedVoiceId(
-                            currentConversation?.voice_id ?? null
-                          );
-                        });
-                    }
-                  }}
-                />
-                <label
-                  htmlFor="audio-enabled"
-                  className="text-2xs font-medium text-muted-foreground/70 cursor-pointer select-none"
-                >
-                  TTS
-                </label>
-              </div>
-              <Select
-                value={selectedVoiceId ?? voices[0]?.voice_id}
-                onValueChange={(value: string) => {
-                  setSelectedVoiceId(value);
-                  if (currentId && currentMetadata) {
-                    const newMetadata = {
-                      ...currentMetadata,
-                      voice_id: value,
-                    };
-                    ConversationsService.updateMetadataApiConversationsConvIdMetadataPut(
-                      currentId,
-                      newMetadata
-                    )
-                      .then((updated) => {
-                        onConversationsChange(
-                          conversations.map((c) =>
-                            c.id === currentId ? updated : c
-                          )
-                        );
-                      })
-                      .catch((error) => {
-                        console.error("Error updating audio settings:", error);
-                        setError("Failed to update audio settings");
-                        // Revert the local state on error
-                        setSelectedVoiceId(
-                          currentConversation?.voice_id ?? null
-                        );
-                      });
-                  }
-                }}
-                disabled={!audioEnabled}
-              >
-                <SelectTrigger className="h-5 text-2xs flex-shrink-0 w-48">
-                  <SelectValue placeholder="Select Voice" />
-                </SelectTrigger>
-                <SelectContent>
-                  {voices
-                    .sort((a, b) => {
-                      if (
-                        categoryOrder[a.category] !== categoryOrder[b.category]
-                      ) {
-                        return (
-                          categoryOrder[a.category] - categoryOrder[b.category]
-                        );
-                      }
-                      return a.name.localeCompare(b.name);
-                    })
-                    .reduce((acc, voice, index, array) => {
-                      if (
-                        index === 0 ||
-                        voice.category !== array[index - 1].category
-                      ) {
-                        acc.push(
+                      {systemPrompts
+                        .sort((a, b) => a.name.localeCompare(b.name))
+                        .map((prompt) => (
                           <SelectItem
-                            key={`separator-${voice.category}`}
-                            value={`separator-${voice.category}`}
-                            disabled
-                            className="text-2xs font-bold"
+                            key={prompt.id}
+                            value={prompt.id}
+                            className="text-2xs"
                           >
-                            {voice.category.charAt(0).toUpperCase() +
-                              voice.category.slice(1)}{" "}
-                            Voices
+                            {prompt.name}
                           </SelectItem>
-                        );
+                        ))}
+                    </SelectContent>
+                  </Select>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    onClick={handleNewSystemPrompt}
+                    className="h-7 w-7"
+                    title="Create new system prompt"
+                  >
+                    <Plus className="text-muted-foreground scale-75 transform" />
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    onClick={handleCreateSystemPromptFromTranscript}
+                    className="h-7 w-7"
+                    title="Create system prompt from conversation"
+                  >
+                    <FileText className="text-muted-foreground scale-75 transform" />
+                  </Button>
+                </div>
+
+                {/* Name Controls */}
+                <div className="flex items-center gap-4 min-w-[280px] px-4 py-2">
+                  <div className="flex items-center gap-2">
+                    <label
+                      htmlFor="persona-name"
+                      className="text-2xs font-medium text-muted-foreground/70 whitespace-nowrap"
+                    >
+                      Persona
+                    </label>
+                    <SmallInput
+                      id="persona-name"
+                      value={localPersonaName}
+                      onChange={(e) => handlePersonaNameChange(e.target.value)}
+                      placeholder="Assistant"
+                      className="h-7 text-2xs w-24"
+                    />
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <label
+                      htmlFor="user-name"
+                      className="text-2xs font-medium text-muted-foreground/70 whitespace-nowrap"
+                    >
+                      User
+                    </label>
+                    <SmallInput
+                      id="user-name"
+                      value={localUserName}
+                      onChange={(e) => handleUserNameChange(e.target.value)}
+                      placeholder="User"
+                      className="h-7 text-2xs w-24"
+                    />
+                  </div>
+                </div>
+
+                {/* TTS Controls */}
+                <div className="flex items-center gap-2 min-w-[250px] px-4 py-2">
+                  <div className="flex items-center gap-2">
+                    <Checkbox
+                      id="audio-enabled"
+                      checked={audioEnabled}
+                      onCheckedChange={(checked) => {
+                        const isChecked = checked === true;
+                        // If enabling TTS and no voice is selected, select the first available voice
+                        const newVoiceId =
+                          isChecked && !selectedVoiceId && voices.length > 0
+                            ? voices[0].voice_id
+                            : selectedVoiceId;
+
+                        setAudioEnabled(isChecked);
+                        if (newVoiceId !== selectedVoiceId) {
+                          setSelectedVoiceId(newVoiceId);
+                        }
+
+                        if (currentId && currentMetadata) {
+                          const newMetadata = {
+                            ...currentMetadata,
+                            audio_enabled: isChecked,
+                            voice_id: newVoiceId,
+                          };
+                          ConversationsService.updateMetadataApiConversationsConvIdMetadataPut(
+                            currentId,
+                            newMetadata
+                          )
+                            .then((updated) => {
+                              onConversationsChange(
+                                conversations.map((c) =>
+                                  c.id === currentId ? updated : c
+                                )
+                              );
+                            })
+                            .catch((error) => {
+                              console.error(
+                                "Error updating audio settings:",
+                                error
+                              );
+                              setError("Failed to update audio settings");
+                              // Revert the local state on error
+                              setAudioEnabled(
+                                currentConversation?.audio_enabled ?? false
+                              );
+                              setSelectedVoiceId(
+                                currentConversation?.voice_id ?? null
+                              );
+                            });
+                        }
+                      }}
+                      className="h-3 w-3"
+                    />
+                    <label
+                      htmlFor="audio-enabled"
+                      className="text-2xs font-medium text-muted-foreground/70 whitespace-nowrap"
+                    >
+                      TTS
+                    </label>
+                  </div>
+                  <Select
+                    value={selectedVoiceId ?? voices[0]?.voice_id}
+                    onValueChange={(value: string) => {
+                      setSelectedVoiceId(value);
+                      if (currentId && currentMetadata) {
+                        const newMetadata = {
+                          ...currentMetadata,
+                          voice_id: value,
+                        };
+                        ConversationsService.updateMetadataApiConversationsConvIdMetadataPut(
+                          currentId,
+                          newMetadata
+                        )
+                          .then((updated) => {
+                            onConversationsChange(
+                              conversations.map((c) =>
+                                c.id === currentId ? updated : c
+                              )
+                            );
+                          })
+                          .catch((error) => {
+                            console.error(
+                              "Error updating audio settings:",
+                              error
+                            );
+                            setError("Failed to update audio settings");
+                            // Revert the local state on error
+                            setSelectedVoiceId(
+                              currentConversation?.voice_id ?? null
+                            );
+                          });
                       }
-                      acc.push(
-                        <SelectItem
-                          key={voice.voice_id}
-                          value={voice.voice_id}
-                          className="text-2xs"
+                    }}
+                    disabled={!audioEnabled}
+                  >
+                    <SelectTrigger className="h-7 text-2xs w-[150px]">
+                      <SelectValue placeholder="Select Voice" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {voices
+                        .sort((a, b) => {
+                          if (
+                            categoryOrder[a.category] !==
+                            categoryOrder[b.category]
+                          ) {
+                            return (
+                              categoryOrder[a.category] -
+                              categoryOrder[b.category]
+                            );
+                          }
+                          return a.name.localeCompare(b.name);
+                        })
+                        .reduce((acc, voice, index, array) => {
+                          if (
+                            index === 0 ||
+                            voice.category !== array[index - 1].category
+                          ) {
+                            acc.push(
+                              <SelectItem
+                                key={`separator-${voice.category}`}
+                                value={`separator-${voice.category}`}
+                                disabled
+                                className="text-2xs font-bold"
+                              >
+                                {voice.category.charAt(0).toUpperCase() +
+                                  voice.category.slice(1)}{" "}
+                                Voices
+                              </SelectItem>
+                            );
+                          }
+                          acc.push(
+                            <SelectItem
+                              key={voice.voice_id}
+                              value={voice.voice_id}
+                              className="text-2xs"
+                            >
+                              {voice.name}
+                            </SelectItem>
+                          );
+                          return acc;
+                        }, [] as JSX.Element[])}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                {/* Tag Controls */}
+                <div className="flex items-center gap-2 min-w-[300px] pl-4 py-2">
+                  <Popover
+                    open={isTagPopoverOpen}
+                    onOpenChange={setIsTagPopoverOpen}
+                  >
+                    <PopoverTrigger asChild>
+                      <Button variant="outline" className="h-7 gap-2 text-2xs">
+                        <Plus className="h-3 w-3" />
+                        Add Tag
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent
+                      className="p-0 w-[200px]"
+                      side="right"
+                      align="start"
+                    >
+                      <Command shouldFilter={false}>
+                        <CommandInput
+                          placeholder="Search or create tag..."
+                          className="h-7 text-2xs"
+                          value={tagInput}
+                          onValueChange={setTagInput}
+                          autoFocus
+                        />
+                        <CommandList>
+                          <ScrollArea className="h-[120px]">
+                            {tagInput &&
+                              !allTags.some(
+                                (tag) =>
+                                  tag.toLowerCase() === tagInput.toLowerCase()
+                              ) && (
+                                <CommandItem
+                                  onSelect={() => {
+                                    handleTagCreate(tagInput);
+                                    setIsTagPopoverOpen(false);
+                                  }}
+                                  className="text-2xs cursor-pointer"
+                                >
+                                  Create tag "{tagInput}"...
+                                </CommandItem>
+                              )}
+                            <CommandGroup
+                              heading="Existing Tags"
+                              className="text-2xs"
+                            >
+                              {allTags
+                                .filter(
+                                  (tag) =>
+                                    !tagInput ||
+                                    tag
+                                      .toLowerCase()
+                                      .includes(tagInput.toLowerCase())
+                                )
+                                .map((tag) => (
+                                  <CommandItem
+                                    key={tag}
+                                    onSelect={() => {
+                                      handleTagSelect(tag);
+                                      setTagInput("");
+                                      setIsTagPopoverOpen(false);
+                                    }}
+                                    className="text-2xs cursor-pointer"
+                                  >
+                                    {tag}
+                                    {currentMetadata?.tags?.includes(tag) && (
+                                      <Check className="h-3 w-3 ml-auto" />
+                                    )}
+                                  </CommandItem>
+                                ))}
+                            </CommandGroup>
+                          </ScrollArea>
+                        </CommandList>
+                      </Command>
+                    </PopoverContent>
+                  </Popover>
+
+                  <ScrollArea className="flex-1">
+                    <div className="flex gap-1 items-center flex-wrap py-1 px-2">
+                      {currentMetadata?.tags?.map((tag) => (
+                        <Badge
+                          variant="secondary"
+                          key={tag}
+                          className="text-2xs py-0 h-5"
                         >
-                          {voice.name}
-                        </SelectItem>
-                      );
-                      return acc;
-                    }, [] as JSX.Element[])}
-                </SelectContent>
-              </Select>
+                          {tag}
+                          <X
+                            className="h-3 w-3 ml-1 cursor-pointer"
+                            onClick={() => handleTagRemove(tag)}
+                          />
+                        </Badge>
+                      ))}
+                    </div>
+                  </ScrollArea>
+                </div>
+              </div>
             </div>
 
             <ScrollArea className="flex-1 border rounded-md p-2 min-h-0 [&_[data-radix-scroll-area-viewport]>div]:!block">

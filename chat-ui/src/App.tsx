@@ -109,14 +109,14 @@ export default function App() {
         <DndContext sensors={sensors} onDragEnd={handleDragEnd}>
           <div
             className="flex gap-4 p-2 min-h-0 h-full"
-            style={{ width: `max(100%, ${panels.length * 700}px)` }}
+            style={{ width: `max(100%, ${panels.length * 900}px)` }}
           >
             <SortableContext
               items={panels}
               strategy={horizontalListSortingStrategy}
             >
               {panels.map((id) => (
-                <div key={id} className="flex-1 min-w-[700px]">
+                <div key={id} className="flex-1 min-w-[900px]">
                   <Conversation
                     id={id}
                     conversations={conversations}
