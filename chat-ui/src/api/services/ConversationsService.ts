@@ -5,6 +5,7 @@
 import type { Body_add_message_api_conversations__conv_id__messages_post } from '../models/Body_add_message_api_conversations__conv_id__messages_post';
 import type { ConversationMetadata } from '../models/ConversationMetadata';
 import type { Message } from '../models/Message';
+import type { MessageCreate } from '../models/MessageCreate';
 import type { MetadataCreate } from '../models/MetadataCreate';
 import type { MetadataUpdate } from '../models/MetadataUpdate';
 import type { SystemPrompt } from '../models/SystemPrompt';
@@ -206,27 +207,6 @@ export class ConversationsService {
             path: {
                 'conv_id': convId,
                 'message_id': messageId,
-            },
-            errors: {
-                422: `Validation Error`,
-            },
-        });
-    }
-    /**
-     * Cancel Message
-     * Cancel an ongoing message stream.
-     * @param assistantMessageId
-     * @returns any Successful Response
-     * @throws ApiError
-     */
-    public static cancelMessageApiConversationsMessagesAssistantMessageIdCancelPost(
-        assistantMessageId: string,
-    ): CancelablePromise<any> {
-        return __request(OpenAPI, {
-            method: 'POST',
-            url: '/api/conversations/messages/{assistant_message_id}/cancel',
-            path: {
-                'assistant_message_id': assistantMessageId,
             },
             errors: {
                 422: `Validation Error`,
@@ -447,6 +427,38 @@ export class ConversationsService {
                 'assistant_prefix': assistantPrefix,
                 'user_prefix': userPrefix,
             },
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Add Cached Message
+     * Add a cached user message to a conversation.
+     *
+     * This endpoint is optimized for large cached messages and does not support:
+     * - File uploads
+     * - Streaming responses
+     * - Anthropic API calls
+     *
+     * Returns just the message ID as acknowledgment.
+     * @param convId
+     * @param requestBody
+     * @returns string Successful Response
+     * @throws ApiError
+     */
+    public static addCachedMessageApiConversationsConvIdCachedMessagePost(
+        convId: string,
+        requestBody: MessageCreate,
+    ): CancelablePromise<string> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/api/conversations/{conv_id}/cached-message',
+            path: {
+                'conv_id': convId,
+            },
+            body: requestBody,
+            mediaType: 'application/json',
             errors: {
                 422: `Validation Error`,
             },

@@ -389,6 +389,48 @@ export function Conversation({
         }
         setIsPreCached(false);
 
+        // Handle cached messages differently
+        if (isPreCached) {
+          if (files?.length) {
+            throw new Error("Cannot add images to cached messages");
+          }
+
+          try {
+            // Use the new cached-message endpoint
+            await ConversationsService.addCachedMessageApiConversationsConvIdCachedMessagePost(
+              currentId,
+              {
+                id: userMessageId,
+                assistant_message_id: assistantMessageId,
+                content: messageData.content,
+                cache: true,
+              }
+            );
+
+            // Update metadata count for just the user message
+            const updatedCount = (currentMetadata?.message_count ?? 0) + 1;
+            onConversationsChange(
+              conversations.map((c) =>
+                c.id === currentId && currentMetadata
+                  ? {
+                      ...currentMetadata,
+                      message_count: updatedCount,
+                    }
+                  : c
+              )
+            );
+
+            setSuccessMessage("Cached message added to conversation");
+            setTimeout(() => setSuccessMessage(null), 3000);
+            setLoading(false);
+            return;
+          } catch (error) {
+            // Clean up the optimistically added message
+            setMessages((prev) => prev.filter((m) => m.id !== userMessageId));
+            throw error;
+          }
+        }
+
         // Create FormData and append message data and files
         const formData = new FormData();
         formData.append("id", messageData.id);

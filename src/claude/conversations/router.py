@@ -838,3 +838,56 @@ async def create_system_prompt_from_transcript(
     save_prompt(system_prompt)
 
     return system_prompt
+
+
+@router.post("/{conv_id}/cached-message", response_model=str)
+async def add_cached_message(
+    conv_id: str,
+    message: MessageCreate,
+) -> str:
+    """Add a cached user message to a conversation.
+
+    This endpoint is optimized for large cached messages and does not support:
+    - File uploads
+    - Streaming responses
+    - Anthropic API calls
+
+    Returns just the message ID as acknowledgment.
+    """
+    # Validate this is a cached user message
+    if not message.cache:
+        raise HTTPException(
+            status_code=400, detail="This endpoint only accepts cached messages"
+        )
+
+    # Load metadata will raise 404 if conversation not found
+    _ = load_metadata(conv_id)
+    messages = load_messages(conv_id)
+    original_messages = messages.copy()
+    original_count = len(messages)
+
+    try:
+        # Create user message
+        user_message = Message(
+            id=message.id,
+            role="user",
+            content=message.content,
+            timestamp=datetime.now(timezone.utc).isoformat(),
+            cache=True,
+            assistant_message_id=message.assistant_message_id,
+        )
+
+        # Add to current conversation's messages
+        messages.append(user_message)
+        save_messages(conv_id, messages)
+        update_message_count(conv_id, len(messages))
+
+        # Return just the message ID
+        return message.id
+
+    except Exception as e:
+        # Restore original state on error
+        save_messages(conv_id, original_messages)
+        update_message_count(conv_id, original_count)
+        # Re-raise storage errors as 500
+        raise HTTPException(status_code=500, detail=str(e))

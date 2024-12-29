@@ -11,6 +11,7 @@ export type { Body_add_message_api_conversations__conv_id__messages_post } from 
 export type { ConversationMetadata } from './models/ConversationMetadata';
 export type { HTTPValidationError } from './models/HTTPValidationError';
 export type { Message } from './models/Message';
+export type { MessageCreate } from './models/MessageCreate';
 export type { MessageImage } from './models/MessageImage';
 export type { MetadataCreate } from './models/MetadataCreate';
 export type { MetadataUpdate } from './models/MetadataUpdate';
