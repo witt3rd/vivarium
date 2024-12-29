@@ -469,7 +469,9 @@ export function Conversation({
           let errorMessage = `Failed to send message (${response.status})`;
           try {
             const errorJson = JSON.parse(errorText);
-            if (errorJson.error?.message) {
+            if (errorJson.detail) {
+              errorMessage = errorJson.detail;
+            } else if (errorJson.error?.message) {
               errorMessage = errorJson.error.message;
             }
           } catch (_) {
@@ -480,6 +482,8 @@ export function Conversation({
           }
 
           setError(errorMessage);
+          setLoading(false); // Make sure to reset loading state
+          messageInputRef.current?.focus(); // Return focus to input
           throw new Error(errorMessage);
         }
 
@@ -635,6 +639,8 @@ export function Conversation({
         ) {
           setError("An unexpected error occurred. Please try again.");
         }
+        setLoading(false); // Make sure loading state is reset
+        messageInputRef.current?.focus(); // Return focus to input
         throw error;
       } finally {
         setLoading(false);
