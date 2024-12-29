@@ -158,7 +158,7 @@ export const MessageInput = forwardRef<MessageInputHandle, MessageInputProps>(
     };
 
     return (
-      <Card className="mb-4">
+      <Card className="mb-0">
         <CardHeader className="flex flex-row items-center justify-between py-0.5 px-1">
           <span className="text-3xs font-medium capitalize text-muted-foreground/70">
             User
@@ -196,7 +196,7 @@ export const MessageInput = forwardRef<MessageInputHandle, MessageInputProps>(
             </Button>
           </div>
         </CardHeader>
-        <CardContent className="p-2 space-y-2">
+        <CardContent className="p-1 space-y-1">
           <input
             type="file"
             ref={fileInputRef}

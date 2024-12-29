@@ -116,7 +116,7 @@ export default function App() {
       )}
     >
       <Toaster />
-      <div className="flex-none flex justify-between items-center p-2">
+      <div className="flex-none flex justify-between items-center p-1">
         <h1 className="font-mono text-primary text-xl tracking-wider font-bold uppercase">
           Vivarium
         </h1>
@@ -151,7 +151,7 @@ export default function App() {
         <div className="absolute inset-0 overflow-x-auto overflow-y-hidden">
           <DndContext sensors={sensors} onDragEnd={handleDragEnd}>
             <div
-              className="flex gap-4 p-2 h-full"
+              className="flex gap-4 p-1 h-full"
               style={{ width: `max(100%, ${panels.length * 900}px)` }}
             >
               <SortableContext
