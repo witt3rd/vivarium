@@ -78,7 +78,9 @@ export function MessageContent({ content }: MessageContentProps) {
     onError: (err) => console.error("Error parsing markdown:", err),
   });
   const contentRef = useRef<HTMLDivElement>(null);
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
   const [shouldScroll, setShouldScroll] = useState(false);
+  const [isScrolledToBottom, setIsScrolledToBottom] = useState(true);
 
   // Memoize the markdown transformation
   const markdownContent = useMemo(() => {
@@ -118,6 +120,35 @@ export function MessageContent({ content }: MessageContentProps) {
 
   const checkScrollHeight = useCallback(debouncedCheck, [debouncedCheck]);
 
+  // Auto-scroll effect when content changes
+  useEffect(() => {
+    const scrollContainer = scrollContainerRef.current?.querySelector(
+      "[data-radix-scroll-area-viewport]"
+    );
+    if (shouldScroll && scrollContainer && isScrolledToBottom) {
+      scrollContainer.scrollTop = scrollContainer.scrollHeight;
+    }
+  }, [reactContent, shouldScroll, isScrolledToBottom]);
+
+  // Track scroll position
+  const handleScroll = useCallback((e: Event) => {
+    const scrollContainer = e.target as HTMLElement;
+    const { scrollTop, scrollHeight, clientHeight } = scrollContainer;
+    const isAtBottom = Math.abs(scrollHeight - clientHeight - scrollTop) < 10;
+    setIsScrolledToBottom(isAtBottom);
+  }, []);
+
+  // Set up scroll event listener
+  useEffect(() => {
+    const scrollContainer = scrollContainerRef.current?.querySelector(
+      "[data-radix-scroll-area-viewport]"
+    );
+    if (scrollContainer) {
+      scrollContainer.addEventListener("scroll", handleScroll);
+      return () => scrollContainer.removeEventListener("scroll", handleScroll);
+    }
+  }, [handleScroll, shouldScroll]);
+
   useEffect(() => {
     checkScrollHeight();
     return () => {
@@ -152,7 +183,7 @@ export function MessageContent({ content }: MessageContentProps) {
   return (
     <div className="relative">
       {shouldScroll ? (
-        <ScrollArea className="h-[400px]">
+        <ScrollArea ref={scrollContainerRef} className="h-[400px]">
           <div className="pr-4">{renderedContent}</div>
         </ScrollArea>
       ) : (

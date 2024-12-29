@@ -52,28 +52,38 @@
 
   /* Custom scrollbar styling */
   ::-webkit-scrollbar {
-    height: 0.625rem;
-    width: 0.625rem;
+    height: 0.25rem;
+    width: 0.25rem;
   }
 
   ::-webkit-scrollbar-track {
-    background-color: hsl(var(--muted));
-    border-radius: var(--radius);
+    background-color: transparent;
   }
 
   ::-webkit-scrollbar-thumb {
-    background-color: hsl(var(--border));
-    border-radius: var(--radius);
+    background-color: hsl(var(--border) / 0.5);
+    border-radius: 0;
   }
 
   ::-webkit-scrollbar-thumb:hover {
-    background-color: hsl(var(--accent));
+    background-color: hsl(var(--border) / 0.7);
   }
 
   /* Firefox */
   * {
+    scrollbar-width: none;
+    scrollbar-color: hsl(var(--border) / 0.5) transparent;
+  }
+
+  /* Only show scrollbars on hover */
+  .overflow-x-auto,
+  .overflow-y-auto {
+    scrollbar-width: none;
+  }
+
+  .overflow-x-auto:hover,
+  .overflow-y-auto:hover {
     scrollbar-width: thin;
-    scrollbar-color: hsl(var(--border)) hsl(var(--muted));
   }
 }
 
