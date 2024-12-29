@@ -33,6 +33,7 @@ import {
 } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import { sortConversations } from "@/lib/conversation-sort";
+import { cn } from "@/lib/utils";
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import {
@@ -131,6 +132,57 @@ export function Conversation({
   const [allTags, setAllTags] = useState<string[]>([]);
   const [tagInput, setTagInput] = useState("");
   const [isTagPopoverOpen, setIsTagPopoverOpen] = useState(false);
+  // Add commandRef for keyboard navigation
+  const commandRef = useRef<HTMLDivElement>(null);
+  // Add state for tracking selected index
+  const [selectedIndex, setSelectedIndex] = useState(0);
+
+  // Enhanced keyboard event handler
+  const handleTagInputKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    const filteredTags = allTags.filter(
+      (tag) => !tagInput || tag.toLowerCase().includes(tagInput.toLowerCase())
+    );
+    const maxIndex = filteredTags.length + (tagInput ? 1 : 0) - 1;
+
+    switch (e.key) {
+      case "ArrowDown":
+        e.preventDefault();
+        setSelectedIndex((prev) => (prev < maxIndex ? prev + 1 : 0));
+        break;
+      case "ArrowUp":
+        e.preventDefault();
+        setSelectedIndex((prev) => (prev > 0 ? prev - 1 : maxIndex));
+        break;
+      case "Enter":
+        e.preventDefault();
+        if (
+          selectedIndex === 0 &&
+          tagInput &&
+          !allTags.some((tag) => tag.toLowerCase() === tagInput.toLowerCase())
+        ) {
+          handleTagCreate(tagInput);
+        } else {
+          const selectedTag =
+            filteredTags[tagInput ? selectedIndex - 1 : selectedIndex];
+          if (selectedTag) {
+            handleTagSelect(selectedTag);
+          }
+        }
+        setTagInput("");
+        setIsTagPopoverOpen(false);
+        setSelectedIndex(0);
+        break;
+      case "Escape":
+        setIsTagPopoverOpen(false);
+        setSelectedIndex(0);
+        break;
+    }
+  };
+
+  // Reset selected index when input changes
+  useEffect(() => {
+    setSelectedIndex(0);
+  }, [tagInput]);
 
   // Initialize local state when metadata changes
   useEffect(() => {
@@ -1496,12 +1548,13 @@ export function Conversation({
                       side="right"
                       align="start"
                     >
-                      <Command shouldFilter={false}>
+                      <Command ref={commandRef} shouldFilter={false}>
                         <CommandInput
                           placeholder="Search or create tag..."
                           className="h-7 text-2xs"
                           value={tagInput}
                           onValueChange={setTagInput}
+                          onKeyDown={handleTagInputKeyDown}
                           autoFocus
                         />
                         <CommandList>
@@ -1514,9 +1567,15 @@ export function Conversation({
                                 <CommandItem
                                   onSelect={() => {
                                     handleTagCreate(tagInput);
+                                    setTagInput("");
                                     setIsTagPopoverOpen(false);
                                   }}
-                                  className="text-2xs cursor-pointer"
+                                  className={cn(
+                                    "text-2xs cursor-pointer hover:bg-muted",
+                                    selectedIndex === 0
+                                      ? "bg-muted text-primary"
+                                      : "text-foreground"
+                                  )}
                                 >
                                   Create tag "{tagInput}"...
                                 </CommandItem>
@@ -1534,7 +1593,7 @@ export function Conversation({
                                       .includes(tagInput.toLowerCase())
                                 )
                                 .sort((a, b) => a.localeCompare(b))
-                                .map((tag) => (
+                                .map((tag, index) => (
                                   <CommandItem
                                     key={tag}
                                     onSelect={() => {
@@ -1542,7 +1601,13 @@ export function Conversation({
                                       setTagInput("");
                                       setIsTagPopoverOpen(false);
                                     }}
-                                    className="text-2xs cursor-pointer"
+                                    className={cn(
+                                      "text-2xs cursor-pointer hover:bg-muted",
+                                      selectedIndex ===
+                                        (tagInput ? index + 1 : index)
+                                        ? "bg-muted text-primary"
+                                        : "text-foreground"
+                                    )}
                                   >
                                     {tag}
                                     {currentMetadata?.tags?.includes(tag) && (
