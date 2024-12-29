@@ -446,7 +446,7 @@ export function Conversation({
         );
 
         if (!response.ok) {
-          // If the server request fails, remove only messages that were added
+          // Clean up any partial messages
           setMessages((prev) =>
             prev.filter((m) => {
               if (m.role === "assistant" && m.id === assistantMessageId)
@@ -456,35 +456,23 @@ export function Conversation({
               return true;
             })
           );
-          onConversationsChange(
-            conversations.map((c) =>
-              c.id === currentId
-                ? { ...c, message_count: currentMetadata?.message_count ?? 0 }
-                : c
-            )
-          );
 
-          // Try to parse error response for more details
+          // Get the error message directly from the response
           const errorText = await response.text();
-          let errorMessage = `Failed to send message (${response.status})`;
+          let errorMessage;
           try {
             const errorJson = JSON.parse(errorText);
-            if (errorJson.detail) {
-              errorMessage = errorJson.detail;
-            } else if (errorJson.error?.message) {
-              errorMessage = errorJson.error.message;
-            }
-          } catch (_) {
-            // If we can't parse JSON, use the raw error text
-            if (errorText) {
-              errorMessage = errorText;
-            }
+            errorMessage =
+              errorJson.detail || errorJson.error?.message || errorText;
+          } catch {
+            errorMessage = errorText;
           }
 
+          // Set the error message directly - no wrapping or transforming
           setError(errorMessage);
-          setLoading(false); // Make sure to reset loading state
-          messageInputRef.current?.focus(); // Return focus to input
-          throw new Error(errorMessage);
+          setLoading(false);
+          messageInputRef.current?.focus();
+          throw new Error(errorMessage); // Create new error with the message
         }
 
         // Handle server response
@@ -632,16 +620,12 @@ export function Conversation({
         }
       } catch (error: unknown) {
         console.error("Error sending message:", error);
-        // Only set error if it hasn't been set by the response handling above
-        if (
-          error instanceof Error &&
-          !error.message.includes("Failed to send message")
-        ) {
-          setError("An unexpected error occurred. Please try again.");
+        if (error instanceof Error) {
+          setError(error.message);
         }
-        setLoading(false); // Make sure loading state is reset
-        messageInputRef.current?.focus(); // Return focus to input
-        throw error;
+        setLoading(false);
+        messageInputRef.current?.focus();
+        throw error; // Re-throw the original error
       } finally {
         setLoading(false);
       }
