@@ -31,7 +31,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { useToast } from "@/hooks/use-toast";
 import { sortConversations } from "@/lib/conversation-sort";
 import { cn } from "@/lib/utils";
 import { useSortable } from "@dnd-kit/sortable";
@@ -120,6 +119,9 @@ export function Conversation({
 
   // Add error state for fetching voices
   const [fetchError, setFetchError] = useState<boolean>(false);
+
+  // Add success message state
+  const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
   const currentMetadata = conversations.find((m) => m.id === currentId);
 
@@ -855,6 +857,9 @@ export function Conversation({
           conversations.map((c) => (c.id === currentId ? updated : c))
         );
         setMessages((prev) => prev.filter((m) => m.id !== messageId));
+        setSuccessMessage(`Deleted system prompt "${message.content[0].text}"`);
+        // Clear success message after 3 seconds
+        setTimeout(() => setSuccessMessage(null), 3000);
       } catch (error) {
         console.error("Error deleting system prompt:", error);
         setError("Failed to delete system prompt");
@@ -958,12 +963,18 @@ export function Conversation({
         setSystemPrompts((prev) =>
           prev.map((p) => (p.id === editedMessage.id ? updatedPrompt : p))
         );
+        setSuccessMessage(`Updated system prompt "${updatedPrompt.name}"`);
+        // Clear success message after 3 seconds
+        setTimeout(() => setSuccessMessage(null), 3000);
       } else {
         await ConversationsService.updateMessageApiConversationsConvIdMessagesMessageIdPut(
           currentId,
           editedMessage.id,
           editedMessage
         );
+        setSuccessMessage(`Message updated successfully`);
+        // Clear success message after 3 seconds
+        setTimeout(() => setSuccessMessage(null), 3000);
       }
       setMessages((prev) =>
         prev.map((msg) => (msg.id === editedMessage.id ? editedMessage : msg))
@@ -983,6 +994,9 @@ export function Conversation({
           is_cached: false,
         });
       setSystemPrompts((prev) => [...prev, newPrompt]);
+      setSuccessMessage(`Created new system prompt "${newPrompt.name}"`);
+      // Clear success message after 3 seconds
+      setTimeout(() => setSuccessMessage(null), 3000);
 
       if (currentId) {
         await handleSystemPromptChange(newPrompt.id);
@@ -1172,8 +1186,6 @@ export function Conversation({
     };
   }, []);
 
-  const { toast } = useToast();
-
   const handleCreateSystemPromptFromTranscript = async () => {
     if (!currentId || !currentMetadata?.name) return;
     try {
@@ -1188,10 +1200,11 @@ export function Conversation({
       setSystemPrompts((prev) =>
         prev.filter((p) => p.id !== newPrompt.id).concat(newPrompt)
       );
-      toast({
-        title: "System Prompt Created",
-        description: `Created new system prompt "${newPrompt.name}" from conversation`,
-      });
+      setSuccessMessage(
+        `Created new system prompt "${newPrompt.name}" from conversation`
+      );
+      // Clear success message after 3 seconds
+      setTimeout(() => setSuccessMessage(null), 3000);
     } catch (error) {
       console.error("Error creating system prompt from transcript:", error);
       setError("Failed to create system prompt from transcript");
@@ -1727,6 +1740,12 @@ export function Conversation({
             {error && (
               <div className="bg-destructive/15 text-destructive px-4 py-2 rounded-md text-2xs">
                 {error}
+              </div>
+            )}
+
+            {successMessage && (
+              <div className="bg-green-500/15 text-green-600 dark:text-green-500 px-4 py-2 rounded-md text-2xs">
+                {successMessage}
               </div>
             )}
 
