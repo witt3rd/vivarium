@@ -2,7 +2,6 @@
 
 import { ConversationMetadata } from "@/api/models/ConversationMetadata";
 import { ConversationsService } from "@/api/services/ConversationsService";
-import { ThemeToggle } from "@/components/theme-toggle";
 import { Button } from "@/components/ui/button";
 import { Toaster } from "@/components/ui/toaster";
 import { cn } from "@/lib/utils";
@@ -143,7 +142,6 @@ export default function App() {
               <Maximize2 className="text-muted-foreground scale-75 transform" />
             )}
           </Button>
-          <ThemeToggle />
         </div>
       </div>
 
