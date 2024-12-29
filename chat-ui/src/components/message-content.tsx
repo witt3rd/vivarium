@@ -19,6 +19,8 @@ interface MessageContent {
 
 interface MessageContentProps {
   content: MessageContent[];
+  isCached?: boolean;
+  isVisible?: boolean;
 }
 
 interface CodeBlockProps {
@@ -63,10 +65,16 @@ const Pre = ({ children, ...props }: { children: React.ReactNode }) => (
 );
 
 const Paragraph = ({ children, ...props }: { children: React.ReactNode }) => (
-  <div {...props}>{children}</div>
+  <div {...props} className="mb-4">
+    {children}
+  </div>
 );
 
-export function MessageContent({ content }: MessageContentProps) {
+export function MessageContent({
+  content,
+  isCached = false,
+  isVisible = true,
+}: MessageContentProps) {
   const [reactContent, setMarkdownSource] = useRemark({
     rehypeReactOptions: {
       components: {
@@ -84,6 +92,8 @@ export function MessageContent({ content }: MessageContentProps) {
 
   // Memoize the markdown transformation
   const markdownContent = useMemo(() => {
+    if (!isVisible) return "";
+
     return content
       .filter((c) => c.type === "text")
       .map((c) => {
@@ -95,16 +105,30 @@ export function MessageContent({ content }: MessageContentProps) {
         );
       })
       .join("\n\n");
-  }, [content]);
+  }, [content, isVisible]);
 
   // Extract images from content
   const images = useMemo(() => {
+    if (!isVisible) return [];
     return content.filter((c) => c.type === "image" && c.source);
+  }, [content, isVisible]);
+
+  // Get a preview of the content for the collapsed state
+  const contentPreview = useMemo(() => {
+    const textContent = content
+      .filter((c) => c.type === "text")
+      .map((c) => c.text)
+      .join(" ");
+    return textContent.length > 100
+      ? textContent.slice(0, 100) + "..."
+      : textContent;
   }, [content]);
 
   useEffect(() => {
-    setMarkdownSource(markdownContent);
-  }, [markdownContent, setMarkdownSource]);
+    if (isVisible) {
+      setMarkdownSource(markdownContent);
+    }
+  }, [markdownContent, setMarkdownSource, isVisible]);
 
   // Debounced scroll height check
   const debouncedCheck = useMemo(
@@ -158,6 +182,12 @@ export function MessageContent({ content }: MessageContentProps) {
 
   // Memoize the rendered content
   const renderedContent = useMemo(() => {
+    if (!isVisible) {
+      return (
+        <div className="text-muted-foreground/70 text-xs">{contentPreview}</div>
+      );
+    }
+
     return (
       <div
         ref={contentRef}
@@ -178,11 +208,11 @@ export function MessageContent({ content }: MessageContentProps) {
         {reactContent}
       </div>
     );
-  }, [reactContent, images]);
+  }, [reactContent, images, isVisible, contentPreview]);
 
   return (
     <div className="relative">
-      {shouldScroll ? (
+      {shouldScroll && isVisible ? (
         <ScrollArea ref={scrollContainerRef} className="h-[400px]">
           <div className="pr-4">{renderedContent}</div>
         </ScrollArea>

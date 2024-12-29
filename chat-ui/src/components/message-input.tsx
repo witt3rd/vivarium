@@ -244,12 +244,12 @@ export const MessageInput = forwardRef<MessageInputHandle, MessageInputProps>(
             <div className="w-36 flex flex-col gap-2">
               <Command className="rounded-lg border shadow-md">
                 <CommandInput
-                  placeholder="Search personas..."
+                  placeholder="Search personae..."
                   className="h-7 text-2xs"
                 />
                 <CommandList>
                   <ScrollArea className="h-[80px]">
-                    <CommandEmpty>No personas found.</CommandEmpty>
+                    <CommandEmpty>No personae found.</CommandEmpty>
                     <CommandGroup>
                       <CommandItem
                         onSelect={() => setSelectedPersona(null)}

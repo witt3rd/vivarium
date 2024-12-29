@@ -98,6 +98,7 @@ export function Conversation({
   const [currentId, setCurrentId] = useState<string | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
   const [systemPrompts, setSystemPrompts] = useState<SystemPrompt[]>([]);
+  const [messageToEdit, setMessageToEdit] = useState<string | null>(null);
 
   // UI state
   const [isEditingTitle, setIsEditingTitle] = useState(false);
@@ -960,7 +961,9 @@ export function Conversation({
       setSystemPrompts((prev) => [...prev, newPrompt]);
 
       if (currentId) {
-        handleSystemPromptChange(newPrompt.id);
+        await handleSystemPromptChange(newPrompt.id);
+        // Set the new prompt to be edited
+        setMessageToEdit(newPrompt.id);
       }
     } catch (error) {
       console.error("Error creating system prompt:", error);
@@ -1660,6 +1663,8 @@ export function Conversation({
                       voiceModel: currentConversation?.voice_id || null,
                     }}
                     conversationId={currentId || ""}
+                    startInEditMode={msg.id === messageToEdit}
+                    onEditComplete={() => setMessageToEdit(null)}
                   />
                 ))}
                 <div ref={messagesEndRef} />

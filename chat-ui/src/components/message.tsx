@@ -11,7 +11,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { SmallInput, SmallTextarea } from "@/components/ui/small-inputs";
-import { Copy, Edit2, Pause, Play, Trash2 } from "lucide-react";
+import { Copy, Edit2, Eye, EyeOff, Pause, Play, Trash2 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { MessageContent as MessageContentComponent } from "./message-content";
 
@@ -32,6 +32,8 @@ interface MessageProps {
     voiceModel: string | null;
   };
   conversationId: string;
+  startInEditMode?: boolean;
+  onEditComplete?: () => void;
 }
 
 export function MessageComponent({
@@ -42,13 +44,16 @@ export function MessageComponent({
   onCacheChange,
   conversationMetadata,
   conversationId,
+  startInEditMode = false,
+  onEditComplete,
 }: MessageProps) {
-  const [isEditing, setIsEditing] = useState(false);
+  const [isEditing, setIsEditing] = useState(startInEditMode);
   const [editedContent, setEditedContent] = useState<MessageContent[]>(
     message.content as MessageContent[]
   );
   const [isPlaying, setIsPlaying] = useState(false);
   const [selectedImageId, setSelectedImageId] = useState<string | null>(null);
+  const [isContentVisible, setIsContentVisible] = useState(!isCached);
   const audioContextRef = useRef<AudioContext | null>(null);
   const sourceNodeRef = useRef<AudioBufferSourceNode | null>(null);
 
@@ -175,11 +180,13 @@ export function MessageComponent({
       content: editedContent,
     });
     setIsEditing(false);
+    onEditComplete?.();
   };
 
   const handleCancel = () => {
     setEditedContent(message.content as MessageContent[]);
     setIsEditing(false);
+    onEditComplete?.();
   };
 
   const handleDelete = () => {
@@ -194,6 +201,14 @@ export function MessageComponent({
     }
   };
 
+  // Start in edit mode if startInEditMode is true
+  useEffect(() => {
+    if (startInEditMode) {
+      setIsEditing(true);
+      setEditedContent(message.content as MessageContent[]);
+    }
+  }, [startInEditMode, message.content]);
+
   return (
     <>
       <Card className={`mb-4 ${isSystemPrompt ? "border-blue-500" : ""}`}>
@@ -204,6 +219,20 @@ export function MessageComponent({
             </span>
           </div>
           <div className="flex items-center gap-1">
+            <Button
+              variant="ghost"
+              className="h-4 w-4 p-0 hover:bg-transparent"
+              onClick={() => setIsContentVisible(!isContentVisible)}
+              title={isContentVisible ? "Hide content" : "Show content"}
+            >
+              <div className="scale-50 transform">
+                {isContentVisible ? (
+                  <EyeOff size={16} strokeWidth={1} />
+                ) : (
+                  <Eye size={16} strokeWidth={1} />
+                )}
+              </div>
+            </Button>
             {shouldDisplayPlayButton && (
               <Button
                 variant="ghost"
@@ -269,7 +298,7 @@ export function MessageComponent({
             </Button>
           </div>
         </CardHeader>
-        <CardContent className="p-2">
+        <CardContent className="p-1">
           {isEditing ? (
             <div className="space-y-4">
               {isSystemPrompt ? (
@@ -322,6 +351,8 @@ export function MessageComponent({
               <div className="overflow-hidden">
                 <MessageContentComponent
                   content={[message.content[1] as MessageContent]}
+                  isCached={isCached}
+                  isVisible={isContentVisible}
                 />
               </div>
             </div>
@@ -330,6 +361,8 @@ export function MessageComponent({
               <div className="overflow-hidden">
                 <MessageContentComponent
                   content={message.content as MessageContent[]}
+                  isCached={isCached}
+                  isVisible={isContentVisible}
                 />
               </div>
               {message.images && message.images.length > 0 && (
