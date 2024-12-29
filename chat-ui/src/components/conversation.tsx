@@ -463,7 +463,24 @@ export function Conversation({
                 : c
             )
           );
-          throw new Error(`HTTP error! status: ${response.status}`);
+
+          // Try to parse error response for more details
+          const errorText = await response.text();
+          let errorMessage = `Failed to send message (${response.status})`;
+          try {
+            const errorJson = JSON.parse(errorText);
+            if (errorJson.error?.message) {
+              errorMessage = errorJson.error.message;
+            }
+          } catch (_) {
+            // If we can't parse JSON, use the raw error text
+            if (errorText) {
+              errorMessage = errorText;
+            }
+          }
+
+          setError(errorMessage);
+          throw new Error(errorMessage);
         }
 
         // Handle server response
@@ -495,17 +512,6 @@ export function Conversation({
                 switch (event.type) {
                   case "message_start":
                     if (event.message.role === "user" && userMessage) {
-                      //   setMessages((prev) => {
-                      //     const newMessages = [...prev];
-                      //     const userMessageIndex = newMessages.findIndex(
-                      //       (msg) =>
-                      //         msg.role === "user" && msg.id === userMessage.id
-                      //     );
-                      //     if (userMessageIndex !== -1) {
-                      //       newMessages[userMessageIndex] = event.message;
-                      //     }
-                      //     return newMessages;
-                      //   });
                       console.error(
                         "UNEXPECTED USER MESSAGE EVENT:",
                         event.message
@@ -545,6 +551,28 @@ export function Conversation({
                         }
                         return newMessages;
                       });
+                    }
+                    break;
+
+                  case "error":
+                    if (event.error?.message) {
+                      setError(event.error.message);
+                      // Remove the assistant's message since it errored
+                      setMessages((prev) =>
+                        prev.filter((m) => m.id !== assistantMessageId)
+                      );
+                      // Update conversation count
+                      onConversationsChange(
+                        conversations.map((c) =>
+                          c.id === currentId
+                            ? {
+                                ...c,
+                                message_count:
+                                  (currentMetadata?.message_count ?? 0) - 1,
+                              }
+                            : c
+                        )
+                      );
                     }
                     break;
                 }
@@ -598,9 +626,15 @@ export function Conversation({
             return newMessages;
           });
         }
-      } catch (error) {
+      } catch (error: unknown) {
         console.error("Error sending message:", error);
-        setError("Failed to send message. Please try again.");
+        // Only set error if it hasn't been set by the response handling above
+        if (
+          error instanceof Error &&
+          !error.message.includes("Failed to send message")
+        ) {
+          setError("An unexpected error occurred. Please try again.");
+        }
         throw error;
       } finally {
         setLoading(false);

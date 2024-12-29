@@ -603,6 +603,17 @@ async def add_message(
                     save_messages(conv_id, original_messages)
                     update_message_count(conv_id, original_count)
 
+                # Send error event to client
+                error_event = {
+                    "type": "error",
+                    "error": {"type": "stream_error", "message": str(e)},
+                }
+                try:
+                    yield f"data: {json.dumps(error_event)}\n\n"
+                except:
+                    print("Failed to send error event, client likely disconnected")
+                return
+
         return StreamingResponse(
             stream_response(),
             media_type="text/event-stream",
