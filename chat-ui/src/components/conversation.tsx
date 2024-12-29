@@ -1272,7 +1272,7 @@ export function Conversation({
                   </div>
                   {currentId && (
                     <Edit2
-                      className="h-3.5 w-3.5 opacity-0 group-hover:opacity-100 transition-opacity flex-none"
+                      className="h-3.5 w-3.5 opacity-0 group-hover:opacity-100 transition-opacity flex-none text-muted-foreground group-hover:text-foreground"
                       strokeWidth={1.5}
                       onClick={(e) => {
                         e.stopPropagation();
@@ -1302,20 +1302,20 @@ export function Conversation({
                         <Button
                           variant="ghost"
                           size="icon"
-                          className="h-6 w-6"
+                          className="h-6 w-6 hover:bg-transparent group"
                           onClick={handleCloneConversation}
                           title="Clone conversation"
                         >
-                          <GitBranch className="h-4 w-4 text-muted-foreground" />
+                          <GitBranch className="h-4 w-4 text-muted-foreground opacity-70 group-hover:text-foreground group-hover:opacity-100 transition-all" />
                         </Button>
                         <Button
                           variant="ghost"
                           size="icon"
-                          className="h-6 w-6"
+                          className="h-6 w-6 hover:bg-transparent group"
                           onClick={handleDownloadTranscript}
                           title="Download transcript"
                         >
-                          <Download className="h-4 w-4 text-muted-foreground" />
+                          <Download className="h-4 w-4 text-muted-foreground opacity-70 group-hover:text-foreground group-hover:opacity-100 transition-all" />
                         </Button>
                       </div>
                     )}
@@ -1325,11 +1325,11 @@ export function Conversation({
                         <Button
                           variant="ghost"
                           size="icon"
-                          className="h-6 w-6"
+                          className="h-6 w-6 hover:bg-transparent group"
                           onClick={() => onRemove?.(id)}
                           title="Close panel"
                         >
-                          <X className="h-4 w-4" />
+                          <X className="h-4 w-4 text-muted-foreground opacity-70 group-hover:text-foreground group-hover:opacity-100 transition-all" />
                         </Button>
                       </>
                     )}
@@ -1375,19 +1375,19 @@ export function Conversation({
                     variant="ghost"
                     size="icon"
                     onClick={handleNewSystemPrompt}
-                    className="h-7 w-7"
+                    className="h-7 w-7 hover:bg-transparent group"
                     title="Create new system prompt"
                   >
-                    <Plus className="text-muted-foreground scale-75 transform" />
+                    <Plus className="text-muted-foreground opacity-70 group-hover:text-foreground group-hover:opacity-100 transition-all scale-75 transform" />
                   </Button>
                   <Button
                     variant="ghost"
                     size="icon"
                     onClick={handleCreateSystemPromptFromTranscript}
-                    className="h-7 w-7"
+                    className="h-7 w-7 hover:bg-transparent group"
                     title="Create system prompt from conversation"
                   >
-                    <FileText className="text-muted-foreground scale-75 transform" />
+                    <FileText className="text-muted-foreground opacity-70 group-hover:text-foreground group-hover:opacity-100 transition-all scale-75 transform" />
                   </Button>
                 </div>
 
@@ -1712,7 +1712,7 @@ export function Conversation({
               <Button
                 variant="ghost"
                 size="icon"
-                className="p-0 h-5 w-5"
+                className="p-0 h-5 w-5 hover:bg-transparent group"
                 onClick={() =>
                   messagesEndRef.current?.parentElement?.scrollIntoView({
                     behavior: "smooth",
@@ -1720,12 +1720,12 @@ export function Conversation({
                 }
                 title="Scroll to top"
               >
-                <ChevronsUp className="h-4 w-4" />
+                <ChevronsUp className="h-4 w-4 text-muted-foreground opacity-70 group-hover:text-foreground group-hover:opacity-100 transition-all" />
               </Button>
               <Button
                 variant="ghost"
                 size="icon"
-                className="p-0 h-5 w-5"
+                className="p-0 h-5 w-5 hover:bg-transparent group"
                 onClick={() =>
                   messagesEndRef.current?.scrollIntoView({
                     behavior: "smooth",
@@ -1733,7 +1733,7 @@ export function Conversation({
                 }
                 title="Scroll to bottom"
               >
-                <ChevronsDown className="h-4 w-4" />
+                <ChevronsDown className="h-4 w-4 text-muted-foreground opacity-70 group-hover:text-foreground group-hover:opacity-100 transition-all" />
               </Button>
             </div>
 
@@ -1775,6 +1775,7 @@ export function Conversation({
               onPreCacheChange={setIsPreCached}
               loading={loading}
               conversations={conversations}
+              onError={setError}
             />
           </CardContent>
         </div>

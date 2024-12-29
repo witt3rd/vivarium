@@ -124,22 +124,22 @@ export default function App() {
             variant="ghost"
             size="icon"
             onClick={handleNewPanel}
-            className="h-5 w-5"
+            className="h-5 w-5 hover:bg-transparent group"
             title="Add new panel"
           >
-            <Plus className="text-muted-foreground scale-75 transform" />
+            <Plus className="text-muted-foreground opacity-70 group-hover:text-foreground group-hover:opacity-100 transition-all scale-75 transform" />
           </Button>
           <Button
             variant="ghost"
             size="icon"
             onClick={toggleFullscreen}
-            className="h-5 w-5"
+            className="h-5 w-5 hover:bg-transparent group"
             title={isFullscreen ? "Exit fullscreen" : "Enter fullscreen"}
           >
             {isFullscreen ? (
-              <Minimize2 className="text-muted-foreground scale-75 transform" />
+              <Minimize2 className="text-muted-foreground opacity-70 group-hover:text-foreground group-hover:opacity-100 transition-all scale-75 transform" />
             ) : (
-              <Maximize2 className="text-muted-foreground scale-75 transform" />
+              <Maximize2 className="text-muted-foreground opacity-70 group-hover:text-foreground group-hover:opacity-100 transition-all scale-75 transform" />
             )}
           </Button>
         </div>

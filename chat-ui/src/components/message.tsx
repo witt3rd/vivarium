@@ -11,6 +11,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { SmallInput, SmallTextarea } from "@/components/ui/small-inputs";
+import { cn } from "@/lib/utils";
 import { Copy, Edit2, Eye, EyeOff, Pause, Play, Trash2 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { MessageContent as MessageContentComponent } from "./message-content";
@@ -221,79 +222,123 @@ export function MessageComponent({
           <div className="flex items-center gap-1">
             <Button
               variant="ghost"
-              className="h-4 w-4 p-0 hover:bg-transparent"
+              className="h-4 w-4 p-0 hover:bg-transparent group"
               onClick={() => setIsContentVisible(!isContentVisible)}
               title={isContentVisible ? "Hide content" : "Show content"}
             >
               <div className="scale-50 transform">
                 {isContentVisible ? (
-                  <EyeOff size={16} strokeWidth={1} />
+                  <EyeOff
+                    size={16}
+                    strokeWidth={1}
+                    className="text-muted-foreground opacity-70 group-hover:text-foreground group-hover:opacity-100 transition-all"
+                  />
                 ) : (
-                  <Eye size={16} strokeWidth={1} />
+                  <Eye
+                    size={16}
+                    strokeWidth={1}
+                    className="text-muted-foreground opacity-70 group-hover:text-foreground group-hover:opacity-100 transition-all"
+                  />
                 )}
               </div>
             </Button>
             {shouldDisplayPlayButton && (
               <Button
                 variant="ghost"
-                className="h-4 w-4 p-0 hover:bg-transparent"
+                className="h-4 w-4 p-0 hover:bg-transparent group"
                 onClick={handlePlayStop}
               >
                 <div className="scale-50 transform">
                   {isPlaying ? (
-                    <Pause size={16} strokeWidth={1} />
+                    <Pause
+                      size={16}
+                      strokeWidth={1}
+                      className="text-muted-foreground opacity-70 group-hover:text-foreground group-hover:opacity-100 transition-all"
+                    />
                   ) : (
-                    <Play size={16} strokeWidth={1} />
+                    <Play
+                      size={16}
+                      strokeWidth={1}
+                      className="text-muted-foreground opacity-70 group-hover:text-foreground group-hover:opacity-100 transition-all"
+                    />
                   )}
                 </div>
               </Button>
             )}
             <div className="flex items-center gap-2 scale-50 transform">
-              <Checkbox
-                id={`cache-${message.id}`}
-                checked={isCached}
-                onCheckedChange={(checked) => {
-                  if (typeof checked === "boolean") {
-                    handleCacheChange(checked);
-                  }
-                }}
-                className="h-3 w-3"
-              />
-              <label
-                htmlFor={`cache-${message.id}`}
-                className="text-2xs font-medium text-muted-foreground/70 cursor-pointer select-none"
+              <div
+                className={cn(
+                  "flex items-center gap-2 group hover:text-foreground hover:opacity-100 transition-all",
+                  (message.images?.length ?? 0) > 0 && "cursor-not-allowed"
+                )}
               >
-                Cache
-              </label>
+                <Checkbox
+                  id={`cache-${message.id}`}
+                  checked={isCached}
+                  onCheckedChange={(checked) => {
+                    if (
+                      typeof checked === "boolean" &&
+                      !(message.images?.length ?? 0)
+                    ) {
+                      handleCacheChange(checked);
+                    }
+                  }}
+                  className="h-3 w-3 text-muted-foreground opacity-70 group-hover:text-foreground group-hover:opacity-100 transition-all"
+                  disabled={(message.images?.length ?? 0) > 0}
+                  title={
+                    (message.images?.length ?? 0) > 0
+                      ? "Messages with images cannot be cached"
+                      : "Cache this message"
+                  }
+                />
+                <label
+                  htmlFor={`cache-${message.id}`}
+                  className="text-2xs font-medium text-muted-foreground/70 cursor-pointer select-none group-hover:text-foreground group-hover:opacity-100 transition-all"
+                >
+                  Cache
+                </label>
+              </div>
             </div>
             <Button
               variant="ghost"
-              className="h-4 w-4 p-0 hover:bg-transparent"
+              className="h-4 w-4 p-0 hover:bg-transparent group"
               onClick={handleEdit}
               title="Edit message"
             >
               <div className="scale-50 transform">
-                <Edit2 size={16} strokeWidth={1} />
+                <Edit2
+                  size={16}
+                  strokeWidth={1}
+                  className="text-muted-foreground opacity-70 group-hover:text-foreground group-hover:opacity-100 transition-all"
+                />
               </div>
             </Button>
             <Button
               variant="ghost"
-              className="h-4 w-4 p-0 hover:bg-transparent"
+              className="h-4 w-4 p-0 hover:bg-transparent group"
               onClick={handleCopy}
               title="Copy message"
             >
               <div className="scale-50 transform">
-                <Copy size={16} strokeWidth={1} />
+                <Copy
+                  size={16}
+                  strokeWidth={1}
+                  className="text-muted-foreground opacity-70 group-hover:text-foreground group-hover:opacity-100 transition-all"
+                />
               </div>
             </Button>
             <Button
               variant="ghost"
-              className="h-4 w-4 p-0 hover:bg-transparent"
+              className="h-4 w-4 p-0 hover:bg-transparent group"
               onClick={handleDelete}
               title="Delete message"
             >
               <div className="scale-50 transform">
-                <Trash2 size={16} strokeWidth={1} />
+                <Trash2
+                  size={16}
+                  strokeWidth={1}
+                  className="text-muted-foreground opacity-70 group-hover:text-foreground group-hover:opacity-100 transition-all"
+                />
               </div>
             </Button>
           </div>

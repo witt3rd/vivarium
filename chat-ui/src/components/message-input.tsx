@@ -39,11 +39,19 @@ interface MessageInputProps {
   onPreCacheChange: (cached: boolean) => void;
   loading?: boolean;
   conversations: ConversationMetadata[];
+  onError?: (error: string) => void;
 }
 
 export const MessageInput = forwardRef<MessageInputHandle, MessageInputProps>(
   function MessageInput(
-    { onSend, isPreCached, onPreCacheChange, loading = false, conversations },
+    {
+      onSend,
+      isPreCached,
+      onPreCacheChange,
+      loading = false,
+      conversations,
+      onError,
+    },
     ref
   ) {
     const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -140,6 +148,14 @@ export const MessageInput = forwardRef<MessageInputHandle, MessageInputProps>(
     const handlePaste = useCallback(
       async (e: React.ClipboardEvent) => {
         const items = Array.from(e.clipboardData.items);
+        const hasImages = items.some((item) => item.type.startsWith("image/"));
+
+        if (hasImages && isPreCached) {
+          onError?.(
+            "Cannot add images to cached messages. Please disable caching first."
+          );
+          return;
+        }
 
         for (const item of items) {
           if (item.type.startsWith("image/")) {
@@ -150,7 +166,7 @@ export const MessageInput = forwardRef<MessageInputHandle, MessageInputProps>(
           }
         }
       },
-      [validateAndAddImage]
+      [validateAndAddImage, isPreCached, onError]
     );
 
     const removeImage = (index: number) => {
@@ -165,35 +181,66 @@ export const MessageInput = forwardRef<MessageInputHandle, MessageInputProps>(
           </span>
           <div className="flex items-center gap-2">
             <div className="flex items-center gap-2 scale-50 transform origin-right">
-              <Checkbox
-                id="pre-cache"
-                checked={isPreCached}
-                onCheckedChange={(checked) => {
-                  if (typeof checked === "boolean") {
-                    onPreCacheChange(checked);
-                  }
-                }}
-                className="h-3 w-3"
-              />
-              <label
-                htmlFor="pre-cache"
-                className="text-2xs font-medium text-muted-foreground/70 cursor-pointer select-none"
+              <div
+                className={cn(
+                  "flex items-center gap-2 group hover:text-foreground hover:opacity-100 transition-all",
+                  attachedImages.length > 0 && "cursor-not-allowed"
+                )}
               >
-                Cache
-              </label>
-            </div>
-            <Button
-              variant="ghost"
-              size="icon"
-              className="h-4 w-4 p-0 hover:bg-transparent"
-              onClick={() => fileInputRef.current?.click()}
-              disabled={loading || attachedImages.length >= 20}
-              title="Upload images"
-            >
-              <div className="scale-50 transform">
-                <Image size={16} strokeWidth={1} />
+                <Checkbox
+                  id="pre-cache"
+                  checked={isPreCached}
+                  onCheckedChange={(checked) => {
+                    if (
+                      typeof checked === "boolean" &&
+                      !attachedImages.length
+                    ) {
+                      onPreCacheChange(checked);
+                    }
+                  }}
+                  className="h-3 w-3 text-muted-foreground opacity-70 group-hover:text-foreground group-hover:opacity-100 transition-all"
+                  disabled={attachedImages.length > 0}
+                  title={
+                    attachedImages.length > 0
+                      ? "Messages with images cannot be cached"
+                      : "Cache this message"
+                  }
+                />
+                <label
+                  htmlFor="pre-cache"
+                  className="text-2xs font-medium text-muted-foreground/70 cursor-pointer select-none group-hover:text-foreground group-hover:opacity-100 transition-all"
+                >
+                  Cache
+                </label>
               </div>
-            </Button>
+            </div>
+            <div
+              className={cn(
+                "scale-50 transform",
+                isPreCached && "cursor-not-allowed"
+              )}
+              title={
+                isPreCached
+                  ? "Images cannot be added to cached messages"
+                  : attachedImages.length >= 20
+                  ? "Maximum number of images reached"
+                  : "Upload images"
+              }
+            >
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-8 w-8 p-0 hover:bg-transparent group"
+                onClick={() => fileInputRef.current?.click()}
+                disabled={loading || attachedImages.length >= 20 || isPreCached}
+              >
+                <Image
+                  size={16}
+                  strokeWidth={1}
+                  className="text-muted-foreground opacity-70 group-hover:text-foreground group-hover:opacity-100 transition-all"
+                />
+              </Button>
+            </div>
           </div>
         </CardHeader>
         <CardContent className="p-1 space-y-1">

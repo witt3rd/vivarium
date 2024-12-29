@@ -128,12 +128,12 @@ export function ConversationHistory({
           variant="ghost"
           size="icon"
           onClick={() => onCollapsedChange?.(!isCollapsed)}
-          className="w-[32px] h-8"
+          className="w-[32px] h-8 hover:bg-transparent group"
         >
           {isCollapsed ? (
-            <ChevronRight className="h-4 w-4" />
+            <ChevronRight className="h-4 w-4 text-muted-foreground opacity-70 group-hover:text-foreground group-hover:opacity-100 transition-all" />
           ) : (
-            <ChevronLeft className="h-4 w-4" />
+            <ChevronLeft className="h-4 w-4 text-muted-foreground opacity-70 group-hover:text-foreground group-hover:opacity-100 transition-all" />
           )}
         </Button>
       </div>
@@ -152,10 +152,10 @@ export function ConversationHistory({
                 size="icon"
                 onClick={onNew}
                 disabled={disableNew}
-                className="h-5 w-5 relative z-20"
+                className="h-5 w-5 relative z-20 hover:bg-transparent group"
                 title="New conversation"
               >
-                <Plus className="text-muted-foreground scale-75 transform" />
+                <Plus className="text-muted-foreground opacity-70 group-hover:text-foreground group-hover:opacity-100 transition-all scale-75 transform" />
               </Button>
             </div>
           </CardHeader>
@@ -199,9 +199,9 @@ export function ConversationHistory({
                     <Button
                       variant="outline"
                       size="sm"
-                      className="h-5 text-2xs gap-1 flex-1"
+                      className="h-5 text-2xs gap-1 flex-1 group"
                     >
-                      <Tags className="h-3 w-3" />
+                      <Tags className="h-3 w-3 text-muted-foreground opacity-70 group-hover:text-foreground group-hover:opacity-100 transition-all" />
                       {selectedTags.length
                         ? `${selectedTags.length} selected`
                         : "Filter Tags"}
@@ -267,7 +267,7 @@ export function ConversationHistory({
                     >
                       {tag}
                       <X
-                        className="h-2 w-2 cursor-pointer"
+                        className="h-2 w-2 cursor-pointer text-muted-foreground opacity-70 hover:text-foreground hover:opacity-100 transition-all"
                         onClick={() => toggleTag(tag)}
                       />
                     </Badge>
@@ -309,10 +309,10 @@ export function ConversationHistory({
                       variant="ghost"
                       size="icon"
                       onClick={(e) => handleDelete(e, conv)}
-                      className="h-3.5 w-3.5"
+                      className="h-3.5 w-3.5 hover:bg-transparent group"
                       title="Delete conversation"
                     >
-                      <Trash2 className="text-muted-foreground scale-75 transform" />
+                      <Trash2 className="text-muted-foreground opacity-70 group-hover:text-foreground group-hover:opacity-100 transition-all scale-75 transform" />
                     </Button>
                   </div>
                 ))}
