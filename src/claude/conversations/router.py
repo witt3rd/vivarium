@@ -33,6 +33,7 @@ from .schema import (
     MetadataCreate,
     MetadataUpdate,
     TokenUsage,
+    TranscriptFormat,
 )
 from .storage import (
     list_metadata,
@@ -627,57 +628,137 @@ async def add_message(
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.get("/{conv_id}/transcript")
+@router.get("/{conv_id}/transcript", response_model=str)
 async def get_transcript(
     conv_id: str,
     assistant_prefix: str | None = "Assistant",
     user_prefix: str | None = "User",
+    format: TranscriptFormat = TranscriptFormat.MARKDOWN,
 ) -> str:
-    """Get messages in markdown format with configurable role prefixes.
+    """Get messages in the specified format.
 
     Args:
         conv_id: Conversation ID
-        assistant_prefix: Custom prefix for assistant messages, None to omit
-        user_prefix: Custom prefix for user messages, None to omit
+        assistant_prefix: Custom prefix for assistant messages, None to omit (markdown only)
+        user_prefix: Custom prefix for user messages, None to omit (markdown only)
+        format: Output format (markdown, sharegpt, or alpaca)
+
+    Returns:
+        str: The transcript in the requested format:
+            - For markdown: A string with markdown formatting
+            - For sharegpt/alpaca: A JSON string representation of the data structure
     """
     messages = load_messages(conv_id)
-    lines: list[str] = []
 
-    for message in messages:
-        # Get appropriate prefix based on role
-        prefix = None
-        if message.role == "assistant":
-            # Check if message already starts with a name prefix pattern
-            content_text = "\n\n".join(
+    if format == TranscriptFormat.MARKDOWN:
+        lines: list[str] = []
+        for message in messages:
+            # Get appropriate prefix based on role
+            prefix = None
+            if message.role == "assistant":
+                # Check if message already starts with a name prefix pattern
+                content_text = "\n\n".join(
+                    str(block["text"])
+                    for block in message.content
+                    if block["type"] == "text"
+                )
+                has_name_prefix = (
+                    content_text.startswith("**")
+                    and "**: " in content_text.split("\n")[0]
+                )
+
+                # Only add prefix if:
+                # 1. assistant_prefix is provided AND
+                # 2. Either it's not the default "Assistant" prefix OR message doesn't have a name prefix
+                if assistant_prefix and (
+                    assistant_prefix != "Assistant" or not has_name_prefix
+                ):
+                    prefix = assistant_prefix
+            elif message.role == "user" and user_prefix:
+                prefix = user_prefix
+
+            content = "\n\n".join(
                 str(block["text"])
                 for block in message.content
                 if block["type"] == "text"
             )
-            has_name_prefix = (
-                content_text.startswith("**") and "**: " in content_text.split("\n")[0]
+
+            # Format line based on whether prefix should be included
+            if prefix:
+                lines.extend([f"**{prefix}**: {content}", ""])
+            else:
+                lines.extend([content, ""])
+
+        return "\n".join(lines)
+
+    elif format == TranscriptFormat.SHAREGPT:
+        # Group messages into conversations (each starting with a user message)
+        conversations: List[Dict[str, List[Dict[str, str]]]] = []
+        current_conversation: List[Dict[str, str]] = []
+
+        for message in messages:
+            # Extract text content from message
+            content = "\n\n".join(
+                str(block["text"])
+                for block in message.content
+                if block["type"] == "text"
             )
 
-            # Only add prefix if:
-            # 1. assistant_prefix is provided AND
-            # 2. Either it's not the default "Assistant" prefix OR message doesn't have a name prefix
-            if assistant_prefix and (
-                assistant_prefix != "Assistant" or not has_name_prefix
-            ):
-                prefix = assistant_prefix
-        elif message.role == "user" and user_prefix:
-            prefix = user_prefix
+            # Add message to current conversation
+            current_conversation.append(
+                {
+                    "from": "human" if message.role == "user" else "assistant",
+                    "value": content,
+                }
+            )
 
-        content = "\n\n".join(
-            str(block["text"]) for block in message.content if block["type"] == "text"
+            # Start new conversation after assistant response
+            if message.role == "assistant" and current_conversation:
+                conversations.append({"conversations": current_conversation})
+                current_conversation = []
+
+        # Add any remaining messages
+        if current_conversation:
+            conversations.append({"conversations": current_conversation})
+
+        return json.dumps(conversations, indent=2)
+
+    elif format == TranscriptFormat.ALPACA:
+        # Convert messages to Alpaca format
+        alpaca_data: List[Dict[str, Any]] = []
+        history: List[List[str]] = []
+
+        for message in messages:
+            # Extract text content from message
+            content = "\n\n".join(
+                str(block["text"])
+                for block in message.content
+                if block["type"] == "text"
+            )
+
+            if message.role == "user":
+                # For user messages, create a new instruction entry
+                alpaca_data.append(
+                    {
+                        "instruction": content,
+                        "input": "",
+                        "output": "",  # Will be filled by next assistant message
+                        "history": history.copy(),  # Copy current history
+                    }
+                )
+            else:  # assistant message
+                if alpaca_data:  # Should always be true as messages alternate
+                    # Fill in the output for the last instruction
+                    alpaca_data[-1]["output"] = content
+                    # Add this exchange to history for next instruction
+                    history.append([alpaca_data[-1]["instruction"], content])
+
+        return json.dumps(alpaca_data, indent=2)
+
+    else:
+        raise HTTPException(
+            status_code=400, detail=f"Unsupported transcript format: {format}"
         )
-
-        # Format line based on whether prefix should be included
-        if prefix:
-            lines.extend([f"**{prefix}**: {content}", ""])
-        else:
-            lines.extend([content, ""])
-
-    return "\n".join(lines)
 
 
 @router.post("/{conv_id}/clone", response_model=ConversationMetadata)
@@ -695,6 +776,11 @@ async def clone_conversation(conv_id: str) -> ConversationMetadata:
         system_prompt_id=source_metadata.system_prompt_id,
         model=source_metadata.model,
         max_tokens=source_metadata.max_tokens,
+        tags=source_metadata.tags.copy(),  # Copy tags list
+        audio_enabled=source_metadata.audio_enabled,
+        voice_id=source_metadata.voice_id,
+        persona_name=source_metadata.persona_name,
+        user_name=source_metadata.user_name,
     )
     save_metadata(new_metadata)
 

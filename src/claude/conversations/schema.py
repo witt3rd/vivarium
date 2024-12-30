@@ -1,7 +1,16 @@
 from datetime import datetime, timezone
+from enum import Enum
 from typing import Any, Dict, List, Optional
 
 from pydantic import BaseModel, Field
+
+
+class TranscriptFormat(str, Enum):
+    """Format for conversation transcripts."""
+
+    MARKDOWN = "markdown"  # Default format with markdown formatting
+    SHAREGPT = "sharegpt"  # ShareGPT JSON format
+    ALPACA = "alpaca"  # Alpaca JSON format
 
 
 class TokenUsage(BaseModel):
