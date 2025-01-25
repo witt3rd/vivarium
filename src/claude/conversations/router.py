@@ -419,7 +419,12 @@ async def add_message(
                             # Add user name prefix for user messages if available
                             if msg.role == "user" and metadata.user_name:
                                 text = f"**{metadata.user_name}**: {text}"
-                            text_content.append({"type": "text", "text": text})
+
+                            content_block = {"type": "text", "text": text}
+                            # Add cache_control if message is marked as cached
+                            if msg.cache:
+                                content_block["cache_control"] = {"type": "ephemeral"}
+                            text_content.append(content_block)
                     message_content.extend(text_content)
 
                     message_dict: MessageParam = {
@@ -476,7 +481,7 @@ async def add_message(
 
             try:
                 # Get Claude's streaming response
-                create_params = {
+                create_params: Dict[str, Any] = {
                     "model": metadata.model,
                     "max_tokens": metadata.max_tokens,
                     "messages": anthropic_messages,
@@ -485,7 +490,7 @@ async def add_message(
                 if system_content is not None:
                     create_params["system"] = system_content
 
-                stream = client.messages.create(**create_params)
+                stream = await client.messages.create(**create_params)
 
                 for chunk in stream:
                     # Check if client has disconnected
