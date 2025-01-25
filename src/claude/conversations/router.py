@@ -490,7 +490,7 @@ async def add_message(
                 if system_content is not None:
                     create_params["system"] = system_content
 
-                stream = await client.messages.create(**create_params)
+                stream = client.messages.create(**create_params)
 
                 for chunk in stream:
                     # Check if client has disconnected

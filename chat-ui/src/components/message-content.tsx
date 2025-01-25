@@ -23,18 +23,35 @@ interface MessageContentProps {
   isVisible?: boolean;
 }
 
-interface CodeBlockProps {
-  children: React.ReactNode;
+interface CodeProps extends React.HTMLAttributes<HTMLElement> {
+  children?: React.ReactNode;
   className?: string;
-  language?: string;
 }
 
-const CodeBlock = ({ children, className, language }: CodeBlockProps) => {
+const CodeComponent = ({ children, className, ...props }: CodeProps) => {
+  // If there's no className or it doesn't contain a language, it's inline code
+  const isInline = !className || !className.startsWith("language-");
+
+  if (isInline) {
+    return (
+      <code
+        className="px-1.5 py-0.5 mx-0.5 rounded-sm bg-muted font-mono text-sm"
+        {...props}
+      >
+        {children}
+      </code>
+    );
+  }
+
+  // For code blocks, include copy button and proper formatting
   const handleCopy = async () => {
     await navigator.clipboard.writeText(
       typeof children === "string" ? children : ""
     );
   };
+
+  // Extract language from className if present
+  const language = className?.replace("language-", "");
 
   return (
     <div className="relative group">
@@ -48,11 +65,12 @@ const CodeBlock = ({ children, className, language }: CodeBlockProps) => {
       </Button>
       <pre
         className={cn(
-          "mt-2 font-mono text-primary border border-border bg-muted p-3 rounded-sm",
-          className
+          "mt-2 font-mono text-primary border border-border bg-muted p-3 rounded-sm"
         )}
       >
-        <code className={cn("text-primary", language)}>{children}</code>
+        <code className={cn("text-primary", language)} {...props}>
+          {children}
+        </code>
       </pre>
     </div>
   );
@@ -78,7 +96,7 @@ export function MessageContent({
   const [reactContent, setMarkdownSource] = useRemark({
     rehypeReactOptions: {
       components: {
-        code: CodeBlock as any,
+        code: CodeComponent as any,
         pre: Pre as any,
         p: Paragraph as any,
       },
