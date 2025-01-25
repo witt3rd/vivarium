@@ -54,24 +54,24 @@ const CodeComponent = ({ children, className, ...props }: CodeProps) => {
   const language = className?.replace("language-", "");
 
   return (
-    <div className="relative group">
+    <div className="relative group mt-2">
       <Button
         variant="ghost"
         size="icon"
-        className="absolute right-2 top-2 h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity"
+        className="absolute right-2 top-2 h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity z-10"
         onClick={handleCopy}
       >
         <Copy className="h-3 w-3" />
       </Button>
-      <pre
+      <code
         className={cn(
-          "mt-2 font-mono text-primary border border-border bg-muted p-3 rounded-sm"
+          "block w-full font-mono text-primary bg-muted p-3 rounded-sm border border-border",
+          language
         )}
+        {...props}
       >
-        <code className={cn("text-primary", language)} {...props}>
-          {children}
-        </code>
-      </pre>
+        {children}
+      </code>
     </div>
   );
 };
@@ -209,7 +209,7 @@ export function MessageContent({
     return (
       <div
         ref={contentRef}
-        className="prose prose-xs dark:prose-invert w-full max-w-none"
+        className="w-full max-w-none [&_pre]:mt-0 [&_pre]:border-0"
       >
         {images.length > 0 && (
           <div className="flex flex-wrap gap-2 mb-4">
