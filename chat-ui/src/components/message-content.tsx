@@ -209,7 +209,7 @@ export function MessageContent({
     return (
       <div
         ref={contentRef}
-        className="w-full max-w-none [&_pre]:mt-0 [&_pre]:border-0"
+        className="prose prose-xs dark:prose-invert w-full max-w-none [&_pre]:mt-0 [&_pre]:border-0"
       >
         {images.length > 0 && (
           <div className="flex flex-wrap gap-2 mb-4">
