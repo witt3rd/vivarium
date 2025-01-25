@@ -35,7 +35,7 @@ const CodeComponent = ({ children, className, ...props }: CodeProps) => {
   if (isInline) {
     return (
       <code
-        className="px-1.5 py-0.5 mx-0.5 rounded-sm bg-muted font-mono text-sm"
+        className="px-1.5 py-0.5 mx-0.5 rounded-sm bg-muted font-mono text-xs"
         {...props}
       >
         {children}
