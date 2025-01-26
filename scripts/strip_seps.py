@@ -8,8 +8,8 @@ import yaml
 src_dir = Path(__file__).parent.parent / "src"
 sys.path.append(str(src_dir))
 
-from claude.storage import SYSTEM_PROMPTS_DIR
-from claude.system_prompts.schema import SystemPrompt
+from vivarium.system_prompts.storage import SYSTEM_PROMPTS_DIR
+from vivarium.system_prompts.schema import SystemPrompt
 
 
 def load_prompt(prompt_id: str) -> SystemPrompt:

@@ -43,6 +43,8 @@ class Settings(BaseSettings):
         description="Comma-separated list of supported image formats",
     )
 
+    anthropic_api_key: str = ""  # Add Anthropic API key field
+
     model_config = SettingsConfigDict(
         env_file=".env", env_file_encoding="utf-8", env_prefix="", extra="allow"
     )

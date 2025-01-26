@@ -1,5 +1,5 @@
 [project]
-name = "claude"
+name = "vivarium"
 version = "0.1.0"
 description = "Add your description here"
 authors = [{ name = "Donald Thompson", email = "witt3rd@witt3rd.com" }]
@@ -10,6 +10,8 @@ dependencies = [
     "pyyaml>=6.0.2",
     "python-multipart>=0.0.20",
     "pydantic-settings>=2.7.0",
+    "litellm>=1.59.8",
+    "loguru>=0.7.3",
 ]
 readme = "README.md"
 requires-python = ">= 3.8"
@@ -26,7 +28,7 @@ dev-dependencies = []
 allow-direct-references = true
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/claude"]
+packages = ["src/vivarium"]
 
 [tool.rye.scripts]
-api = "uvicorn src.claude.main:app --reload --port 9000"
+api = "uvicorn src.vivarium.main:app --reload --port 9000"

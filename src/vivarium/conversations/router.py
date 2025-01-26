@@ -17,10 +17,11 @@ from typing import (
 )
 
 import yaml
-from anthropic import Anthropic
-from anthropic.types import MessageParam
+import litellm
+from litellm.utils import ModelResponse
 from fastapi import APIRouter, File, Form, HTTPException, Query, Request, UploadFile
 from fastapi.responses import FileResponse, StreamingResponse
+from loguru import logger
 
 from ..config import settings
 from ..system_prompts.schema import SystemPrompt
@@ -44,10 +45,6 @@ from .storage import (
     save_metadata,
     update_message_count,
 )
-
-# Dictionary to track active message streams
-active_streams: Dict[str, Any] = {}
-
 
 def get_images_dir(conv_id: str) -> Path:
     """Get the images directory for a conversation."""
@@ -238,12 +235,12 @@ async def add_message(
     target_persona: Annotated[str | None, Form()] = None,
     files: List[UploadFile] = File(default=[]),
 ) -> StreamingResponse:
-    """Add a message and get Claude's streaming response."""
+    """Add a message and get LLM's streaming response."""
     # Load current state
     metadata = load_metadata(conv_id)
-    messages = load_messages(conv_id)
-    original_messages = messages.copy()
-    original_count = len(messages)
+    original_messages = load_messages(conv_id)
+    messages = original_messages.copy()
+    message_count = len(messages)
 
     try:
         # Parse content from JSON string
@@ -335,6 +332,9 @@ async def add_message(
             save_messages(conv_id, messages)
             update_message_count(conv_id, len(messages))
 
+        # Initialize system_content at the start
+        system_content = None
+
         # If we have a target_persona, handle special flow
         if target_persona:
             # Load metadata for target persona (conversation ID)
@@ -364,17 +364,15 @@ async def add_message(
             transcript = await get_transcript(conv_id, None, metadata.user_name)
 
             # Create a single message with the transcript and use system prompt in system argument
-            anthropic_messages = [
-                {
-                    "role": "user",
-                    "content": [
-                        {
-                            "type": "text",
-                            "text": f"I am currently participating in a group conversation:\n\n[BEGIN GROUP CONVERSATION]\n\n{transcript}[END GROUP CONVERSATION]\n\nI will respond to this conversation, as {persona_name}, consistent with my beliefs, ethics, morals, and unique perspective in order to advance the group's shared understanding and goals:",
-                        }
-                    ],
-                }
-            ]
+            persona_message = Message(
+                id=str(uuid.uuid4()),
+                role="user",
+                content=[{
+                    "type": "text",
+                    "text": f"I am currently participating in a group conversation:\n\n[BEGIN GROUP CONVERSATION]\n\n{transcript}[END GROUP CONVERSATION]\n\nI will respond to this conversation, as {persona_name}, consistent with my beliefs, ethics, morals, and unique perspective in order to advance the group's shared understanding and goals:"
+                }],
+                timestamp=datetime.now(timezone.utc).isoformat()
+            )
 
             # Set system content to target's system prompt with cache control
             system_content = [
@@ -384,253 +382,236 @@ async def add_message(
                     "cache_control": {"type": "ephemeral"},
                 }
             ]
+
+            # Convert messages to LiteLLM format
+            litellm_messages = convert_messages_to_litellm([persona_message], conv_id, metadata, system_content)
         else:
-            # Normal flow - convert messages to Anthropic format
-            anthropic_messages = []
-            for msg in messages:
-                if msg.content:
-                    message_content = []
-
-                    # Only include images for the current (last) message
-                    if msg.images and msg == messages[-1]:
-                        for img in msg.images:
-                            img_path = (
-                                get_images_dir(conv_id)
-                                / f"{img.id}{Path(img.filename).suffix}"
-                            )
-                            with open(img_path, "rb") as f:
-                                base64_data = base64.b64encode(f.read()).decode()
-                                message_content.append(
-                                    {
-                                        "type": "image",
-                                        "source": {
-                                            "type": "base64",
-                                            "media_type": img.media_type,
-                                            "data": base64_data,
-                                        },
-                                    }
-                                )
-
-                    # Add text content, prefixing with user name for user messages if available
-                    text_content = []
-                    for block in msg.content:
-                        if block["type"] == "text":
-                            text = block["text"]
-                            # Add user name prefix for user messages if available
-                            if msg.role == "user" and metadata.user_name:
-                                text = f"**{metadata.user_name}**: {text}"
-
-                            content_block = {"type": "text", "text": text}
-                            # Add cache_control if message is marked as cached
-                            if msg.cache:
-                                content_block["cache_control"] = {"type": "ephemeral"}
-                            text_content.append(content_block)
-                    message_content.extend(text_content)
-
-                    message_dict: MessageParam = {
-                        "role": "user" if msg.role == "user" else "assistant",
-                        "content": message_content,
-                    }
-                    anthropic_messages.append(message_dict)
-            # Get system prompt if exists
-            system_content = None  # Initialize to None instead of empty string
+            # Normal flow - check for system prompt
             if metadata.system_prompt_id:
                 system_prompt = load_prompt(metadata.system_prompt_id)
-                if system_prompt.is_cached:
-                    system_content = [
-                        {
-                            "type": "text",
-                            "text": system_prompt.content,
-                            "cache_control": {"type": "ephemeral"},
-                        }
-                    ]
-                else:
-                    system_content = system_prompt.content
-
-        # Create Anthropic client with cache control enabled
-        client = Anthropic()
-        setattr(client, "_headers", {"anthropic-beta": "prompt-caching-2024-07-31"})
-
-        # Dump request parameters to debug file
-        debug_dir = Path(settings.debug_dir)
-        debug_dir.mkdir(parents=True, exist_ok=True)
-        debug_file = debug_dir / f"{assistant_message_id}.yaml"
-
-        debug_data = {
-            "model": metadata.model,
-            "max_tokens": metadata.max_tokens,
-            "messages": anthropic_messages,
-            "system": system_content,
-        }
-
-        with open(debug_file, "w", encoding="utf-8") as f:
-            yaml.safe_dump(
-                debug_data,
-                f,
-                default_flow_style=False,
-                allow_unicode=True,
-                sort_keys=False,
-            )
-
-        async def stream_response():
-            """Stream the response from Claude."""
-            response_text = ""
-            usage_data = None
-            assistant_message_saved = False
-            stream: StreamCloseable | None = None
-
-            try:
-                # Get Claude's streaming response
-                create_params: Dict[str, Any] = {
-                    "model": metadata.model,
-                    "max_tokens": metadata.max_tokens,
-                    "messages": anthropic_messages,
-                    "stream": True,
-                }
-                if system_content is not None:
-                    create_params["system"] = system_content
-
-                stream = client.messages.create(**create_params)
-
-                for chunk in stream:
-                    # Check if client has disconnected
-                    if await request.is_disconnected():
-                        if (
-                            stream
-                            and hasattr(stream, "close")
-                            and callable(stream.close)
-                        ):
-                            try:
-                                await stream.close()
-                            except:
-                                print("Failed to close stream after client disconnect")
-                        return
-
-                    event: Dict[str, Any] = {
-                        "type": chunk.type,
+                system_content = [
+                    {
+                        "type": "text",
+                        "text": system_prompt.content,
+                        "cache_control": {"type": "ephemeral"} if system_prompt.is_cached else None
                     }
+                ]
 
-                    if chunk.type == "message_start":
-                        # Extract usage information if available
-                        message = getattr(chunk, "message", None)
-                        usage = getattr(message, "usage", None) if message else None
-                        if usage:
-                            usage_data = TokenUsage(
-                                cache_creation_input_tokens=getattr(
-                                    usage, "cache_creation_input_tokens", None
-                                ),
-                                cache_read_input_tokens=getattr(
-                                    usage, "cache_read_input_tokens", None
-                                ),
-                                input_tokens=getattr(usage, "input_tokens", None),
-                                output_tokens=getattr(usage, "output_tokens", None),
-                            )
+            # Convert messages to LiteLLM format
+            litellm_messages = convert_messages_to_litellm(messages, conv_id, metadata, system_content)
 
-                        # Construct message event
-                        event["message"] = {
-                            "id": assistant_message_id,
-                            "role": "assistant",
-                            "usage": usage_data.model_dump() if usage_data else None,
+        try:
+            # Configure LiteLLM with the correct headers for Anthropic
+            litellm.headers = {
+                "anthropic": {
+                    "anthropic-beta": "prompt-caching-2024-07-31"
+                }
+            }
+
+            # Configure LiteLLM callback for usage tracking
+            def track_usage_callback(kwargs, completion_response, start_time, end_time):
+                try:
+                    logger.debug(f"LiteLLM callback received response: {completion_response}")
+                    if hasattr(completion_response, 'usage'):
+                        logger.debug(f"Usage data from callback: {completion_response.usage}")
+                except Exception as e:
+                    logger.error(f"Error in usage callback: {str(e)}")
+
+            litellm.success_callback = [track_usage_callback]
+
+            # Convert to LiteLLM parameters
+            create_params = {
+                "model": f"anthropic/{metadata.model}",
+                "max_tokens": metadata.max_tokens,
+                "messages": litellm_messages,
+                "stream": True,
+                "stream_options": {"include_usage": True}  # Enable usage tracking in stream
+            }
+
+            async def stream_response():
+                """Stream the response from LiteLLM."""
+                response_text = ""
+                usage_dict = None
+                assistant_message_saved = False
+
+                try:
+                    # Get streaming response
+                    stream = await litellm.acompletion(**create_params)
+
+                    async for chunk in stream:
+                        # Check if client has disconnected
+                        if await request.is_disconnected():
+                            if stream and hasattr(stream, "close") and callable(stream.close):
+                                try:
+                                    await stream.close()
+                                except:
+                                    print("Failed to close stream after client disconnect")
+                            return
+
+                        # Extract content from the chunk
+                        delta = chunk.choices[0].delta
+
+                        # Check for usage data in the chunk
+                        if hasattr(chunk, 'usage'):
+                            logger.debug(f"Raw usage data from chunk: {chunk.usage}")
+                            logger.debug(f"Raw usage data attributes: {dir(chunk.usage)}")
+                            usage_dict = {
+                                "input_tokens": int(chunk.usage.prompt_tokens),
+                                "output_tokens": int(chunk.usage.completion_tokens),
+                                "cache_creation_input_tokens": int(getattr(chunk.usage, "cache_creation_input_tokens", 0)),
+                                "cache_read_input_tokens": int(getattr(chunk.usage, "cache_read_input_tokens", 0))
+                            }
+                            logger.debug(f"Processed usage_dict for message {assistant_message_id}: {usage_dict}")
+                            logger.debug(f"Cache metrics - Creation: {usage_dict['cache_creation_input_tokens']}, Read: {usage_dict['cache_read_input_tokens']}")
+
+                        # Determine event type based on delta content
+                        is_content = bool(delta.content)
+                        event = {
+                            "type": "content_block_delta" if is_content else "message_start"
                         }
-                    elif chunk.type == "content_block_start":
-                        event["content_block"] = {
-                            "type": "text",
-                            "text": "",
-                        }
-                    elif chunk.type == "content_block_delta":
-                        delta = getattr(chunk, "delta", None)
-                        if delta and getattr(delta, "text", None):
-                            delta_text = str(getattr(delta, "text", ""))
-                            # For target_persona responses, prefix with persona name
-                            if target_persona and not response_text:
-                                delta_text = f"**{persona_name}**: {delta_text}"
-                            response_text = response_text + delta_text
+
+                        # Handle content
+                        if is_content:
+                            delta_text = delta.content
+                            response_text += delta_text
                             event["delta"] = {
                                 "type": "text_delta",
-                                "text": delta_text,
+                                "text": delta_text
                             }
-                    elif chunk.type == "message_delta":
-                        # Update all token usage fields from final usage data
-                        delta_usage = getattr(chunk, "usage", None)
-                        if delta_usage and usage_data:
-                            for field in [
-                                "output_tokens",
-                                "cache_read_input_tokens",
-                                "cache_creation_input_tokens",
-                                "input_tokens",
-                            ]:
-                                value = getattr(delta_usage, field, None)
-                                if value is not None:
-                                    setattr(usage_data, field, value)
 
-                    try:
-                        yield f"data: {json.dumps(event)}\n\n"
-                    except:
-                        print("Failed to send chunk, client likely disconnected")
-                        if (
-                            stream
-                            and hasattr(stream, "close")
-                            and callable(stream.close)
-                        ):
+                        # Add usage to event if we have it
+                        if usage_dict and event["type"] == "message_start":
+                            event["message"] = {
+                                "id": assistant_message_id,
+                                "role": "assistant",
+                                "usage": usage_dict
+                            }
+                            logger.debug(f"Added usage to message_start event: {event}")
+
+                            # Save the assistant message when we have usage data
+                            if not assistant_message_saved:
+                                logger.debug(f"Creating assistant message with usage_dict: {usage_dict}")
+                                assistant_message = Message(
+                                    id=assistant_message_id,
+                                    role="assistant",
+                                    content=[{"type": "text", "text": response_text}],
+                                    usage=TokenUsage(**usage_dict) if usage_dict is not None else None,
+                                    timestamp=datetime.now(timezone.utc).isoformat(),
+                                )
+                                logger.debug(f"Created assistant message with usage: {assistant_message.usage}")
+                                messages.append(assistant_message)
+                                save_messages(conv_id, messages)
+                                update_message_count(conv_id, len(messages))
+                                assistant_message_saved = True
+
+                        try:
+                            # logger.debug(f"Sending event: {event}")
+                            yield f"data: {json.dumps(event)}\n\n"
+                        except:
+                            print("Failed to send chunk, client likely disconnected")
+                            if stream and hasattr(stream, "close") and callable(stream.close):
+                                try:
+                                    await stream.close()
+                                except:
+                                    print("Failed to close stream after send failure")
+                            return
+
+                        # Send DONE event after saving message with usage data
+                        if assistant_message_saved:
                             try:
-                                await stream.close()
+                                yield "data: [DONE]\n\n"
                             except:
-                                print("Failed to close stream after send failure")
-                        return
+                                print("Failed to send DONE message, client likely disconnected")
+                                return
 
-                # Save the assistant message if we completed normally
-                if not assistant_message_saved:
-                    assistant_message = Message(
-                        id=assistant_message_id,
-                        role="assistant",
-                        content=[{"type": "text", "text": response_text}],
-                        usage=usage_data,
-                        timestamp=datetime.now(timezone.utc).isoformat(),
-                    )
-                    messages.append(assistant_message)
-                    save_messages(conv_id, messages)
-                    update_message_count(conv_id, len(messages))
-                    assistant_message_saved = True
+                except Exception as e:
+                    import traceback
+                    error_details = {
+                        "error": str(e),
+                        "error_type": type(e).__name__,
+                        "stack_trace": traceback.format_exc()
+                    }
+                    print("Error in stream:")
+                    print(f"Error type: {error_details['error_type']}")
+                    print(f"Error message: {error_details['error']}")
+                    print(f"Stack trace:\n{error_details['stack_trace']}")
 
+                    if stream and hasattr(stream, "close") and callable(stream.close):
+                        try:
+                            await stream.close()
+                        except Exception as close_error:
+                            print(f"Failed to close stream after error: {close_error}")
+                            print(f"Close error stack trace:\n{traceback.format_exc()}")
+
+                    if not assistant_message_saved:
+                        save_messages(conv_id, original_messages)
+                        update_message_count(conv_id, message_count)
+
+                    # Send detailed error event to client
+                    error_event = {
+                        "type": "error",
+                        "error": {
+                            "type": error_details['error_type'],
+                            "message": error_details['error']
+                        }
+                    }
                     try:
-                        yield "data: [DONE]\n\n"
-                    except:
-                        print("Failed to send DONE message, client likely disconnected")
-                        return
+                        yield f"data: {json.dumps(error_event)}\n\n"
+                    except Exception as send_error:
+                        print(f"Failed to send error event: {send_error}")
+                        print(f"Send error stack trace:\n{traceback.format_exc()}")
+                    return
 
-            except Exception as e:
-                print(f"Error in stream: {e}")
-                if stream and hasattr(stream, "close") and callable(stream.close):
-                    try:
-                        await stream.close()
-                    except:
-                        print("Failed to close stream after error")
-                if not assistant_message_saved:
-                    save_messages(conv_id, original_messages)
-                    update_message_count(conv_id, original_count)
+            return StreamingResponse(
+                stream_response(),
+                media_type="text/event-stream",
+            )
 
-                # Send error event to client
-                error_event = {
-                    "type": "error",
-                    "error": {"type": "stream_error", "message": str(e)},
+        except Exception as e:
+            # Restore original state on error
+            import traceback
+            error_details = {
+                "error": str(e),
+                "error_type": type(e).__name__,
+                "stack_trace": traceback.format_exc()
+            }
+            print("Error in add_message endpoint:")
+            print(f"Error type: {error_details['error_type']}")
+            print(f"Error message: {error_details['error']}")
+            print(f"Stack trace:\n{error_details['stack_trace']}")
+
+            save_messages(conv_id, original_messages)
+            update_message_count(conv_id, message_count)
+            raise HTTPException(
+                status_code=500,
+                detail={
+                    "error": str(e),
+                    "error_type": error_details['error_type']
                 }
-                try:
-                    yield f"data: {json.dumps(error_event)}\n\n"
-                except:
-                    print("Failed to send error event, client likely disconnected")
-                return
-
-        return StreamingResponse(
-            stream_response(),
-            media_type="text/event-stream",
-        )
+            )
 
     except Exception as e:
         # Restore original state on error
-        print(f"Error: {e}")
+        import traceback
+        error_details = {
+            "error": str(e),
+            "error_type": type(e).__name__,
+            "stack_trace": traceback.format_exc()
+        }
+        print("Error in add_message endpoint:")
+        print(f"Error type: {error_details['error_type']}")
+        print(f"Error message: {error_details['error']}")
+        print(f"Stack trace:\n{error_details['stack_trace']}")
+
         save_messages(conv_id, original_messages)
-        update_message_count(conv_id, original_count)
-        raise HTTPException(status_code=500, detail=str(e))
+        update_message_count(conv_id, message_count)
+        raise HTTPException(
+            status_code=500,
+            detail={
+                "error": str(e),
+                "error_type": error_details['error_type']
+            }
+        )
 
 
 @router.get("/{conv_id}/transcript", response_model=str)
@@ -982,3 +963,84 @@ async def add_cached_message(
         update_message_count(conv_id, original_count)
         # Re-raise storage errors as 500
         raise HTTPException(status_code=500, detail=str(e))
+
+
+def convert_messages_to_litellm(messages: List[Message], conv_id: str, metadata: ConversationMetadata, system_content: Any = None) -> List[Dict[str, Any]]:
+    """Convert messages to LiteLLM format while preserving all functionality."""
+    try:
+        litellm_messages = []
+        logger.debug(f"Converting {len(messages)} messages to LiteLLM format")
+        logger.debug(f"Messages with cache=True: {[msg.id for msg in messages if msg.cache]}")
+
+        # Handle system message first if present
+        if system_content:
+            try:
+                system_message = {
+                    "role": "system",
+                    "content": [
+                        {
+                            "type": "text",
+                            "text": system_content[0]["text"],
+                            "cache_control": system_content[0].get("cache_control")
+                        }
+                    ]
+                }
+                logger.debug(f"Added cache control to system message: {system_message}")
+                litellm_messages.append(system_message)
+            except (KeyError, IndexError) as e:
+                raise ValueError(f"Invalid system content format: {str(e)}")
+
+        # Convert regular messages
+        for msg in messages:
+            try:
+                message_content = []
+                logger.debug(f"Processing message {msg.id}, cache={msg.cache}")
+
+                # Handle images if present
+                if msg.images:
+                    for img in msg.images:
+                        try:
+                            img_path = get_images_dir(conv_id) / f"{img.id}{Path(img.filename).suffix}"
+                            with open(img_path, "rb") as f:
+                                base64_data = base64.b64encode(f.read()).decode()
+                                message_content.append({
+                                    "type": "image_url",
+                                    "image_url": {
+                                        "url": f"data:{img.media_type};base64,{base64_data}"
+                                    }
+                                })
+                        except IOError as e:
+                            print(f"Error processing image {img.filename}: {str(e)}")
+                            raise
+
+                # Add text content
+                for block in msg.content:
+                    if block["type"] == "text":
+                        text = block["text"]
+                        if msg.role == "user" and metadata.user_name:
+                            text = f"**{metadata.user_name}**: {text}"
+                        message_content.append({
+                            "type": "text",
+                            "text": text,
+                            "cache_control": {"type": "ephemeral"} if msg.cache else None
+                        })
+
+                # Create message with proper role and content
+                litellm_message = {
+                    "role": msg.role,
+                    "content": message_content
+                }
+
+                litellm_messages.append(litellm_message)
+            except Exception as e:
+                print(f"Error processing message {msg.id}: {str(e)}")
+                # Don't print message content as it may contain binary data
+                raise
+
+        logger.debug(f"Final litellm_messages structure: {json.dumps([{k:v for k,v in msg.items() if k != 'content'} for msg in litellm_messages], indent=2)}")
+        return litellm_messages
+    except Exception as e:
+        import traceback
+        print(f"Error in convert_messages_to_litellm: {str(e)}")
+        print(f"Stack trace:\n{traceback.format_exc()}")
+        raise

@@ -7,10 +7,10 @@ from pathlib import Path
 src_dir = Path(__file__).parent.parent / "src"
 sys.path.append(str(src_dir))
 
-from claude.conversations.router import get_conversation_markdown
-from claude.conversations.storage import load_conversation
-from claude.system_prompts.schema import SystemPrompt
-from claude.system_prompts.storage import load_prompt, save_prompt
+from vivarium.conversations.router import get_conversation_markdown
+from vivarium.conversations.storage import load_conversation
+from vivarium.system_prompts.schema import SystemPrompt
+from vivarium.system_prompts.storage import load_prompt, save_prompt
 
 
 async def create_transcript(conversation_id: str) -> str:
